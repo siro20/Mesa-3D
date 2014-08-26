@@ -247,8 +247,10 @@ static void update_raster_state( struct st_context *st )
    if (st_fb_orientation(ctx->DrawBuffer) == Y_0_TOP)
       raster->bottom_edge_rule = 1;
    /* _NEW_TRANSFORM */
-   if (ctx->Transform.ClipOrigin == GL_UPPER_LEFT)
+   if (ctx->Transform.ClipOrigin == GL_UPPER_LEFT) {
       raster->bottom_edge_rule ^= 1;
+      raster->lower_left_origin = st->use_rast_y_flip;
+   }
 
    /* ST_NEW_RASTERIZER */
    raster->rasterizer_discard = ctx->RasterDiscard;
