@@ -27,6 +27,9 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 
+#include "target-helpers/inline_drm_helper.h"
+#include "target-helpers/inline_sw_helper.h"
+
 #include "state_tracker/drm_driver.h"
 
 #include "d3dadapter/d3dadapter9.h"
@@ -138,15 +141,19 @@ drm_resource_from_present( struct d3dadapter9_context *ctx,
     return D3D_OK;
 }
 
+
+
 static void
 drm_destroy( struct d3dadapter9_context *ctx )
 {
+	#if !GALLIUM_STATIC_TARGETS
     struct d3dadapter9drm_context *drm = (struct d3dadapter9drm_context *)ctx;
 
     /* pipe_loader_sw destroys the context */
     if (drm->swdev) { pipe_loader_release(&drm->swdev, 1); }
     pipe_loader_release(&drm->dev, 1);
-    
+    #endif
+
     FREE(ctx);
 }
 
@@ -299,18 +306,20 @@ drm_create_adapter( int fd,
     struct d3dadapter9drm_context *ctx = CALLOC_STRUCT(d3dadapter9drm_context);
     HRESULT hr;
     int i;
-    
+    #if !GALLIUM_STATIC_TARGETS
     const char *paths[] = {
         getenv("D3D9_DRIVERS_PATH"),
         getenv("D3D9_DRIVERS_DIR"),
         PIPE_SEARCH_DIR
     };
-    
+    #endif
     if (!ctx) { return E_OUTOFMEMORY; }
 
     ctx->base.resource_from_present = drm_resource_from_present;
     ctx->base.destroy = drm_destroy;
-
+	#if GALLIUM_STATIC_TARGETS
+	 ctx->base.hal = dd_create_screen(fd);
+	#else
     /* use pipe-loader to dlopen appropriate drm driver */
     if (!pipe_loader_drm_probe_fd(&ctx->dev, fd, FALSE)) {
         DBG("Failed to probe drm fd %d.\n", fd);
@@ -325,13 +334,15 @@ drm_create_adapter( int fd,
         if (!paths[i]) { continue; }
         ctx->base.hal = pipe_loader_create_screen(ctx->dev, paths[i]);
     }
+	#endif
     if (!ctx->base.hal) {
         DBG("Unable to load requested driver.\n");
-        pipe_loader_release(&ctx->dev, 1);
-        FREE(ctx);
+        drm_destroy(&ctx->base);
         return D3DERR_DRIVERINTERNALERROR;
     }
-    
+    #if GALLIUM_STATIC_TARGETS
+ 		ctx->base.ref = ninesw_create_screen(ctx->base.hal);
+	#else
     /* wrap it to create a software screen that can share resources */
     if (pipe_loader_sw_probe_wrapped(&ctx->swdev, ctx->base.hal)) {
         ctx->base.ref = NULL;
@@ -340,6 +351,7 @@ drm_create_adapter( int fd,
             ctx->base.ref = pipe_loader_create_screen(ctx->swdev, paths[i]);
         }
     }
+	#endif
     if (!ctx->base.ref) {
         DBG("Couldn't wrap drm screen to swrast screen. Software devices "
             "will be unavailable.\n");
@@ -351,10 +363,7 @@ drm_create_adapter( int fd,
     /* create and return new ID3DAdapter9 */
     hr = NineAdapter9_new(&ctx->base, (struct NineAdapter9 **)ppAdapter);
     if (FAILED(hr)) {
-        if (ctx->swdev) { pipe_loader_release(&ctx->swdev, 1); }
-        pipe_loader_release(&ctx->dev, 1);
-        FREE(ctx);
-        return hr;
+        drm_destroy(&ctx->base);
     }
     
     return D3D_OK;

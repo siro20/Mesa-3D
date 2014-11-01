@@ -6,7 +6,6 @@
 #include "util/u_debug.h"
 #include "state_tracker/sw_winsys.h"
 
-
 /* Helper function to choose and instantiate one of the software rasterizers:
  * llvmpipe, softpipe.
  */
@@ -19,7 +18,7 @@
 #include "llvmpipe/lp_public.h"
 #endif
 
-
+extern struct pipe_screen *ninesw_create_screen(struct pipe_screen *screen);
 static INLINE struct pipe_screen *
 sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
 {
@@ -91,6 +90,31 @@ drisw_create_screen(struct drisw_loader_funcs *lf)
    return screen;
 }
 #endif // DRI_TARGET
+
+#if defined(NINE_TARGET)
+#include "sw/wrapper/wrapper_sw_winsys.h"
+#include "target-helpers/inline_debug_helper.h"
+INLINE struct pipe_screen *
+ninesw_create_screen(struct pipe_screen *pscreen)
+{
+ struct sw_winsys *winsys = NULL;
+ struct pipe_screen *screen = NULL;
+
+ winsys = wrapper_sw_winsys_wrap_pipe_screen(pscreen);
+ if (winsys == NULL)
+ return NULL;
+
+ screen = sw_screen_create(winsys);
+ if (screen == NULL) {
+ winsys->destroy(winsys);
+ return NULL;
+ }
+
+ screen = debug_screen_wrap(screen);
+ return screen;
+}
+#endif // NINE_TARGET
+
 #endif // GALLIUM_SOFTPIPE
 
 

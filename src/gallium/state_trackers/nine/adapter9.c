@@ -71,18 +71,25 @@ NineAdapter9_GetScreen( struct NineAdapter9 *This,
                         D3DDEVTYPE DevType,
                         struct pipe_screen **ppScreen )
 {
+    const char *force_sw = getenv("D3D_ALWAYS_SOFTWARE");
     switch (DevType) {
         case D3DDEVTYPE_HAL:
+            if (force_sw && !strcmp(force_sw, "1") && This->ctx->ref) {
+                *ppScreen = This->ctx->ref;
+                break;
+            }
             *ppScreen = This->ctx->hal;
             break;
 
         case D3DDEVTYPE_REF:
         case D3DDEVTYPE_NULLREF:
+        case D3DDEVTYPE_SW:
+            if (force_sw && !strcmp(force_sw, "0")) {
+                *ppScreen = This->ctx->hal;
+                break;
+            }
             *ppScreen = This->ctx->ref;
             break;
-
-        case D3DDEVTYPE_SW:
-            return D3DERR_NOTAVAILABLE;
 
         default:
             user_assert(!"Invalid device type", D3DERR_INVALIDCALL);

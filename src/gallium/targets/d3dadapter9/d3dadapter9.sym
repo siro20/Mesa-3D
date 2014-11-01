@@ -1,0 +1,7 @@
+{
+	global:
+		D3DAdapter9GetProc;
+	local:
+		*;
+};
+

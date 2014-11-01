@@ -24,18 +24,18 @@
 
 #include "util/u_memory.h"
 
-#ifdef HAVE_PIPE_LOADER_DRM
+
 #include "d3dadapter/drm.h"
 extern const struct D3DAdapter9DRM drm9_desc;
-#endif /* HAVE_PIPE_LOADER_DRM */
+
 
 struct {
     const char *name;
     const void *desc;
 } drivers[] = {
-#ifdef HAVE_PIPE_LOADER_DRM
+
     { D3DADAPTER9DRM_NAME, &drm9_desc },
-#endif /* HAVE_PIPE_LOADER_DRM */
+
 };
 
 PUBLIC const void * WINAPI

@@ -23,14 +23,29 @@
 include $(top_srcdir)/src/gallium/Automake.inc
 
 AM_CFLAGS = \
-	$(NINE_CFLAGS) \
-	$(GALLIUM_CFLAGS) \
-	$(VISIBILITY_CFLAGS) \
+	-I$(top_srcdir)/include/D3D9 \
+	-I$(top_srcdir)/src/loader \
+	-I$(top_srcdir)/src/mapi/ \
+	-I$(top_srcdir)/src/mesa/ \
+	-I$(top_srcdir)/src/mesa/drivers/dri/common/ \
+	-I$(top_builddir)/src/mesa/drivers/dri/common/ \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/gallium/state_trackers/nine \
-	-I$(top_srcdir)/include/D3D9 \
+	$(GALLIUM_TARGET_CFLAGS) \
+	$(VISIBILITY_CFLAGS)
+
+if HAVE_GALLIUM_STATIC_TARGETS
+AM_CPPFLAGS = \
+	-DNINE_TARGET \
+	-DGALLIUM_STATIC_TARGETS=1
+
+else
+
+AM_CPPFLAGS = \
 	-DPIPE_SEARCH_DIR=\"$(GALLIUM_PIPE_LOADER_DIR)\" \
 	$(GALLIUM_PIPE_LOADER_DEFINES)
+
+endif
 
 lib_LTLIBRARIES = libd3dadapter9.la
 
@@ -39,26 +54,65 @@ libd3dadapter9_la_SOURCES = \
 	drm.c
 
 libd3dadapter9_la_LDFLAGS = \
-	-no-undefined \
 	-shared \
+	-shrext .so \
+	-module \
+	-no-undefined \
+	$(GC_SECTIONS) \
 	$(LD_NO_UNDEFINED)
+
+if HAVE_LD_VERSION_SCRIPT
+libd3dadapter9_la_LDFLAGS += \
+	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/d3dadapter9/d3dadapter9.sym
+endif # HAVE_LD_VERSION_SCRIPT
 
 libd3dadapter9_la_LIBADD = \
 	$(top_builddir)/src/gallium/auxiliary/libgallium.la \
-	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
 	$(top_builddir)/src/gallium/state_trackers/nine/libninetracker.la \
-	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/util/libmesautil.la \
-	$(GALLIUM_PIPE_LOADER_LIBS) \
+	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
 	$(LIBUDEV_LIBS) \
+	$(EXPAT_LIBS) \
 	$(GALLIUM_COMMON_LIB_DEPS)
 
-if NEED_WINSYS_XLIB
+
+TARGET_DRIVERS =
+TARGET_CPPFLAGS =
+TARGET_LIB_DEPS = $(top_builddir)/src/loader/libloader.la
+
+include $(top_srcdir)/src/gallium/drivers/i915/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/ilo/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/nouveau/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/r300/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/r600/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/radeonsi/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/svga/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/freedreno/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
+
+include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc
+
+if HAVE_GALLIUM_STATIC_TARGETS
+
+libd3dadapter9_la_CPPFLAGS = $(AM_CPPFLAGS) $(TARGET_CPPFLAGS)
+libd3dadapter9_la_LIBADD += $(TARGET_LIB_DEPS) \
+	$(TARGET_RADEON_WINSYS) $(TARGET_RADEON_COMMON)
+
+else # HAVE_GALLIUM_STATIC_TARGETS
+
 libd3dadapter9_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/sw/xlib/libws_xlib.la \
-	-lX11 -lXext -lXfixes
-endif
+	$(top_builddir)/src/gallium/auxiliary/pipe-loader/libpipe_loader.la \
+	$(GALLIUM_PIPE_LOADER_WINSYS_LIBS) \
+	$(GALLIUM_PIPE_LOADER_LIBS)
+
+endif # HAVE_GALLIUM_STATIC_TARGETS
 
 if HAVE_MESA_LLVM
 nodist_EXTRA_libd3dadapter9_la_SOURCES = dummy.cpp
@@ -66,13 +120,9 @@ libd3dadapter9_la_LDFLAGS += $(LLVM_LDFLAGS)
 libd3dadapter9_la_LIBADD += $(LLVM_LIBS)
 endif
 
-if HAVE_DRI2
-libd3dadapter9_la_LIBADD += \
-	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
-endif
-
 d3dadapterdir = $(includedir)/d3dadapter
 d3dadapter_HEADERS = \
 	$(top_srcdir)/include/d3dadapter/d3dadapter9.h \
 	$(top_srcdir)/include/d3dadapter/drm.h \
 	$(top_srcdir)/include/d3dadapter/present.h
+
