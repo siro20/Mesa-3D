@@ -290,10 +290,9 @@ NineAdapter9_CheckDeviceFormat( struct NineAdapter9 *This,
     if (Usage & (D3DUSAGE_QUERY_SRGBREAD | D3DUSAGE_QUERY_SRGBWRITE))
         pf = util_format_srgb(pf);
 
-    DBG("Format=%s/%s Usage/Bind=%x/%d RType/Target=%u/%s\n", // replace %d to %s
+    DBG("Format=%s/%s Usage/Bind=%x/%s RType/Target=%u/%s\n",
         d3dformat_to_string(CheckFormat), util_format_name(pf),
-        Usage, bind, // temporary simplified for merge, FIXME
-        /* Usage, util_dump_bind_flags(bind), */
+        Usage, util_dump_bind_flags(bind),
         RType, util_dump_tex_target(target, TRUE));
 
     if (pf == PIPE_FORMAT_NONE ||
