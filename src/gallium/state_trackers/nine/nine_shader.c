@@ -2042,8 +2042,7 @@ DECL_SPECIAL(TEXCOORD)
     const unsigned s = tx->insn.dst[0].idx;
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
 
-    if (ureg_src_is_undef(tx->regs.vT[s]))
-        tx->regs.vT[s] = ureg_DECL_fs_input(ureg, tx->texcoord_sn, s, TGSI_INTERPOLATE_PERSPECTIVE);
+    tx_texcoord_alloc(tx, s);
     ureg_MOV(ureg, dst, tx->regs.vT[s]); /* XXX is this sufficient ? */
 
     return D3D_OK;
@@ -2055,8 +2054,7 @@ DECL_SPECIAL(TEXCOORD_ps14)
     const unsigned s = tx->insn.src[0].idx;
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
 
-    if (ureg_src_is_undef(tx->regs.vT[s]))
-        tx->regs.vT[s] = ureg_DECL_fs_input(ureg, tx->texcoord_sn, s, TGSI_INTERPOLATE_PERSPECTIVE);
+    tx_texcoord_alloc(tx, s);
     ureg_MOV(ureg, dst, tx->regs.vT[s]); /* XXX is this sufficient ? */
 
     return D3D_OK;
@@ -2155,8 +2153,7 @@ DECL_SPECIAL(TEXM3x3)
     assert(m >= 0 && m > n);
 
     for (s = m; s <= (m + 2); ++s) {
-        if (ureg_src_is_undef(tx->regs.vT[s]))
-            tx->regs.vT[s] = ureg_DECL_fs_input(ureg, tx->texcoord_sn, s, TGSI_INTERPOLATE_PERSPECTIVE);
+        tx_texcoord_alloc(tx, s);
         src[s] = tx->regs.vT[s];
     }
     ureg_DP3(ureg, ureg_writemask(dst, TGSI_WRITEMASK_X), src[0], ureg_src(tx->regs.tS[n]));
@@ -2240,8 +2237,7 @@ DECL_SPECIAL(TEX)
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src[2];
 
-    if (ureg_src_is_undef(tx->regs.vT[s]))
-        tx->regs.vT[s] = ureg_DECL_fs_input(ureg, tx->texcoord_sn, s, TGSI_INTERPOLATE_PERSPECTIVE);
+    tx_texcoord_alloc(tx, s);
 
     src[0] = tx->regs.vT[s];
     src[1] = ureg_DECL_sampler(ureg, s);
