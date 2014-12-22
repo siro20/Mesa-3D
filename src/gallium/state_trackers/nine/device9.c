@@ -99,36 +99,12 @@ NineDevice9_RestoreNonCSOState( struct NineDevice9 *This, unsigned mask )
     DBG("This=%p mask=%u\n", This, mask);
 
     if (mask & 0x1) {
-        struct pipe_constant_buffer cb;
-        cb.buffer_offset = 0;
-        cb.buffer = NULL;
-        cb.user_buffer = This->state.vs_const_f;
-        cb.buffer_size = This->vs_const_size;
-        if (!This->driver_caps.user_cbufs) {
-            u_upload_data(This->constbuf_uploader,
-                          0,
-                          cb.buffer_size,
-                          cb.user_buffer,
-                          &cb.buffer_offset,
-                          &cb.buffer);
-            u_upload_unmap(This->constbuf_uploader);
-            cb.user_buffer = NULL;
-        }
-        pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, &cb);
-
-        cb.user_buffer = This->state.ps_const_f;
-        cb.buffer_size = This->ps_const_size;
-        if (!This->driver_caps.user_cbufs) {
-            u_upload_data(This->constbuf_uploader,
-                          0,
-                          cb.buffer_size,
-                          cb.user_buffer,
-                          &cb.buffer_offset,
-                          &cb.buffer);
-            u_upload_unmap(This->constbuf_uploader);
-            cb.user_buffer = NULL;
-        }
-        pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 0, &cb);
+        This->state.changed.vs_const_f = TRUE;
+        This->state.changed.vs_const_i = TRUE;
+        This->state.changed.vs_const_b = TRUE;
+        This->state.changed.ps_const_f = TRUE;
+        This->state.changed.ps_const_i = TRUE;
+        This->state.changed.ps_const_b = TRUE;
     }
 
     if (mask & 0x2) {
