@@ -329,7 +329,7 @@ update_ps(struct NineDevice9 *device)
 
 #define DETERMINE_CONSTBUFFER_SIZE(device, s) \
     s->num_bool_consts_slots > 0 ? NINE_CONST_B_BASE(device->max_vs_const_f) + s->num_bool_consts_slots : \
-    s->num_int_consts_slots > 0 ? NINE_CONST_I_BASE(device->max_vs_const_f) + s->num_int_consts_slots * 4 * sizeof(int) : \
+    s->num_int_consts_slots > 0 ? NINE_CONST_I_BASE(device->max_vs_const_f) + s->num_int_consts_slots * 4 * sizeof(int32_t) : \
     s->num_float_consts_slots * 4 * sizeof(float)
 
 static void
@@ -348,12 +348,12 @@ update_vs_constants_userbuf(struct NineDevice9 *device)
         return;
 
     if (state->changed.vs_const_i) {
-        int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
+        int32_t *idst = (int32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
         memcpy(idst, state->vs_const_i, sizeof(state->vs_const_i));
         state->changed.vs_const_i = FALSE;
     }
     if (state->changed.vs_const_b) {
-        int *idst = (int *)&state->vs_const_f[4 * device->max_vs_const_f];
+        uint32_t *idst = (uint32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
         int i;
         for (i = 0; i < NINE_MAX_CONST_B; ++i)
@@ -416,12 +416,12 @@ update_ps_constants_userbuf(struct NineDevice9 *device)
         return;
 
     if (state->changed.ps_const_i) {
-        int *idst = (int *)&state->ps_const_f[4 * device->max_ps_const_f];
+        int32_t *idst = (int32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
         memcpy(idst, state->ps_const_i, sizeof(state->ps_const_i));
         state->changed.ps_const_i = FALSE;
     }
     if (state->changed.ps_const_b) {
-        int *idst = (int *)&state->ps_const_f[4 * device->max_ps_const_f];
+        uint32_t *idst = (uint32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
         int i;
         for (i = 0; i < NINE_MAX_CONST_B; ++i)

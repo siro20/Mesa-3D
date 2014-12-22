@@ -2924,7 +2924,7 @@ NineDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
 HRESULT WINAPI
 NineDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
-                                      const int *pConstantData,
+                                      const int32_t *pConstantData,
                                       UINT Vector4iCount )
 {
     struct nine_state *state = This->update;
@@ -2949,7 +2949,7 @@ NineDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 HRESULT WINAPI
 NineDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
                                       UINT StartRegister,
-                                      int *pConstantData,
+                                      int32_t *pConstantData,
                                       UINT Vector4iCount )
 {
     const struct nine_state *state = &This->state;
@@ -3226,7 +3226,7 @@ NineDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
 HRESULT WINAPI
 NineDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
-                                     const int *pConstantData,
+                                     const int32_t *pConstantData,
                                      UINT Vector4iCount )
 {
     struct nine_state *state = This->update;
@@ -3251,7 +3251,7 @@ NineDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 HRESULT WINAPI
 NineDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
                                      UINT StartRegister,
-                                     int *pConstantData,
+                                     int32_t *pConstantData,
                                      UINT Vector4iCount )
 {
     const struct nine_state *state = &This->state;

@@ -137,13 +137,13 @@ struct nine_state
      */
     struct NineVertexShader9 *vs;
     float *vs_const_f;
-    int    vs_const_i[NINE_MAX_CONST_I][4];
+    int32_t vs_const_i[NINE_MAX_CONST_I][4];
     BOOL   vs_const_b[NINE_MAX_CONST_B];
     uint32_t vs_key;
 
     struct NinePixelShader9 *ps;
     float *ps_const_f;
-    int    ps_const_i[NINE_MAX_CONST_I][4];
+    int32_t ps_const_i[NINE_MAX_CONST_I][4];
     BOOL   ps_const_b[NINE_MAX_CONST_B];
     uint32_t ps_key;
 
