@@ -355,9 +355,7 @@ update_vs_constants_userbuf(struct NineDevice9 *device)
     if (state->changed.vs_const_b) {
         uint32_t *idst = (uint32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        int i;
-        for (i = 0; i < NINE_MAX_CONST_B; ++i)
-            bdst[i] = state->vs_const_b[i] ? device->vs_bool_true : 0;
+        memcpy(bdst, state->vs_const_b, sizeof(state->vs_const_b));
         state->changed.vs_const_b = FALSE;
     }
 
@@ -423,9 +421,7 @@ update_ps_constants_userbuf(struct NineDevice9 *device)
     if (state->changed.ps_const_b) {
         uint32_t *idst = (uint32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
         uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        int i;
-        for (i = 0; i < NINE_MAX_CONST_B; ++i)
-            bdst[i] = state->ps_const_b[i] ? device->ps_bool_true : 0;
+        memcpy(bdst, state->ps_const_b, sizeof(state->ps_const_b));
         state->changed.ps_const_b = FALSE;
     }
 
