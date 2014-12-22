@@ -1494,7 +1494,7 @@ DECL_SPECIAL(LOOP)
         ureg_BGNLOOP(tx->ureg, label);
         tmp = tx_scratch_scalar(tx);
         /* tmp = crt.x == 0 */
-        ureg_USEQ(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1i(ureg, 0));
+        ureg_ISGE(ureg, tmp, ureg_imm1i(ureg, 0), ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X));
         ureg_UIF(ureg, tx_src_scalar(tmp), tx_cond(tx));
     }
     ureg_BRK(ureg);
@@ -1586,7 +1586,7 @@ DECL_SPECIAL(REP)
         ureg_SLE(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1f(ureg, 0.0f));
         ureg_IF(ureg, tx_src_scalar(tmp), tx_cond(tx));
     } else {
-        ureg_USEQ(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1i(ureg, 0));
+        ureg_ISGE(ureg, tmp, ureg_imm1i(ureg, 0), ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X));
         ureg_UIF(ureg, tx_src_scalar(tmp), tx_cond(tx));
     }
     ureg_BRK(ureg);
