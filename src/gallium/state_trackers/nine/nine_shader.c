@@ -1493,8 +1493,8 @@ DECL_SPECIAL(LOOP)
         ureg_MOV(ureg, ctr, src); /* ctr is integers */
         ureg_BGNLOOP(tx->ureg, label);
         tmp = tx_scratch_scalar(tx);
-        /* tmp = crt.x < 1 */
-        ureg_ISLT(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1i(ureg, 1.0));
+        /* tmp = crt.x == 0 */
+        ureg_USEQ(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1i(ureg, 0));
         ureg_UIF(ureg, tx_src_scalar(tmp), tx_cond(tx));
     }
     ureg_BRK(ureg);
