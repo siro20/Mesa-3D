@@ -889,7 +889,10 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
     case D3DSPR_LOOP:
         if (ureg_dst_is_undef(tx->regs.address))
             tx->regs.address = ureg_DECL_address(ureg);
-        ureg_ARR(ureg, tx->regs.address, tx_get_loopal(tx));
+        if (!tx->native_integers)
+            ureg_ARR(ureg, tx->regs.address, tx_get_loopal(tx));
+        else
+            ureg_UARL(ureg, tx->regs.address, tx_get_loopal(tx));
         src = ureg_src(tx->regs.address);
         break;
     case D3DSPR_MISCTYPE:
@@ -1482,22 +1485,29 @@ DECL_SPECIAL(LOOP)
     struct ureg_dst ctr;
     struct ureg_dst tmp;
 
-    /* TODO: if tx->native_integers, then use integers */
     label = tx_bgnloop(tx);
     ctr = tx_get_loopctr(tx, TRUE);
 
     /* src: num_iterations - start_value of al - step for al - 0 */
-    assert(tx->native_integers); /* TODO: here src is always integer. Need write them differently if card doesn't support integers */
-    ureg_I2F(ureg, ctr, src);
-    /* substract 0.5 to num_iteration. We'll decrease it, and stop when < 0 */
-    ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_0), ureg_src(ctr), ureg_imm1f(ureg, -0.5f));
+    if (!tx->native_integers) {
+        ureg_MOV(ureg, ctr, src); /* ctr is floats */
+        /* substract 0.5 to num_iteration. We'll decrease it, and stop when < 0 */
+        ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_0), ureg_src(ctr), ureg_imm1f(ureg, -0.5f));
 
-    ureg_BGNLOOP(tx->ureg, label);
+        ureg_BGNLOOP(tx->ureg, label);
 
-    /* break if ctr.x <= 0 */
-    tmp = tx_scratch_scalar(tx);
-    ureg_SLE(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1f(ureg, 0.0f));
-    ureg_IF(ureg, tx_src_scalar(tmp), tx_cond(tx));
+        /* break if ctr.x <= 0 */
+        tmp = tx_scratch_scalar(tx);
+        ureg_SLE(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1f(ureg, 0.0f));
+        ureg_IF(ureg, tx_src_scalar(tmp), tx_cond(tx));
+    } else {
+        ureg_MOV(ureg, ctr, src); /* ctr is integers */
+        ureg_BGNLOOP(tx->ureg, label);
+        tmp = tx_scratch_scalar(tx);
+        /* tmp = crt.x < 1 */
+        ureg_ISLT(ureg, tmp, ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_X), ureg_imm1i(ureg, 1.0));
+        ureg_UIF(ureg, tx_src_scalar(tmp), tx_cond(tx));
+    }
     ureg_BRK(ureg);
     tx_endcond(tx);
     ureg_ENDIF(ureg);
@@ -1514,10 +1524,15 @@ DECL_SPECIAL(ENDLOOP)
 {
     struct ureg_program *ureg = tx->ureg;
     struct ureg_dst ctr = tx_get_loopctr(tx, TRUE);
-    /* decrement ctr.x */
-    ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_0), ureg_src(ctr), ureg_imm1f(ureg, -1.0f));
-    /* ctr.y (aL) += step */
-    ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_1), ureg_src(ctr), ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_Z));
+    if (!tx->native_integers) {
+        /* decrement ctr.x */
+        ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_0), ureg_src(ctr), ureg_imm1f(ureg, -1.0f));
+        /* ctr.y (aL) += step */
+        ureg_ADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_1), ureg_src(ctr), ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_Z));
+    } else {
+        ureg_UADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_0), ureg_src(ctr), ureg_imm1i(ureg, -1.0));
+        ureg_UADD(ureg, ureg_writemask(ctr, NINED3DSP_WRITEMASK_1), ureg_src(ctr), ureg_scalar(ureg_src(ctr), TGSI_SWIZZLE_Z));
+    }
     ureg_ENDLOOP(tx->ureg, tx_endloop(tx));
     return D3D_OK;
 }
