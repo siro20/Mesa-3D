@@ -338,26 +338,44 @@ update_vs_constants_userbuf(struct NineDevice9 *device)
     struct nine_state *state = &device->state;
     struct pipe_context *pipe = device->pipe;
     struct pipe_constant_buffer cb;
+    boolean several_constbufs = device->driver_caps.several_constbufs;
     float *temp_buffer = NULL;
+
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = DETERMINE_CONSTBUFFER_SIZE(device, device->state.vs);
+
+    if (several_constbufs) {
+        if (state->changed.vs_const_i) {
+            cb.buffer_size = device->state.vs->num_int_consts_slots * 4 * sizeof(int32_t);
+            cb.user_buffer = device->state.vs_const_i;
+            if (cb.buffer_size)
+                pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 1, &cb);
+            state->changed.vs_const_i = FALSE;
+        }
+        if (state->changed.vs_const_b) {
+            cb.buffer_size = align(device->state.vs->num_bool_consts_slots, 4) * sizeof(int32_t);
+            cb.user_buffer = device->state.vs_const_b;
+            if (cb.buffer_size)
+                pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 2, &cb);
+            state->changed.vs_const_b = FALSE;
+        }
+        cb.buffer_size = device->state.vs->num_float_consts_slots * 4 * sizeof(float);
+    } else {
+        if (state->changed.vs_const_i) {
+            int32_t *idst = (int32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
+            memcpy(idst, state->vs_const_i, sizeof(state->vs_const_i));
+            state->changed.vs_const_i = FALSE;
+        }
+        if (state->changed.vs_const_b) {
+            uint32_t *idst = (uint32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
+            uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
+            memcpy(bdst, state->vs_const_b, sizeof(state->vs_const_b));
+            state->changed.vs_const_b = FALSE;
+       }
+       cb.buffer_size = DETERMINE_CONSTBUFFER_SIZE(device, device->state.vs);
+    }
+
     cb.user_buffer = device->state.vs_const_f;
-
-    if (!cb.buffer_size)
-        return;
-
-    if (state->changed.vs_const_i) {
-        int32_t *idst = (int32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
-        memcpy(idst, state->vs_const_i, sizeof(state->vs_const_i));
-        state->changed.vs_const_i = FALSE;
-    }
-    if (state->changed.vs_const_b) {
-        uint32_t *idst = (uint32_t *)&state->vs_const_f[4 * device->max_vs_const_f];
-        uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        memcpy(bdst, state->vs_const_b, sizeof(state->vs_const_b));
-        state->changed.vs_const_b = FALSE;
-    }
 
     if (device->state.vs->lconstf.ranges) {
         /* TODO: Can we make it so that we don't have to copy everything ? */
@@ -378,6 +396,9 @@ update_vs_constants_userbuf(struct NineDevice9 *device)
         }
         cb.user_buffer = temp_buffer;
     }
+
+    if (!cb.buffer_size)
+        return;
 
     if (!device->driver_caps.user_cbufs) {
         u_upload_data(device->constbuf_uploader,
@@ -405,25 +426,46 @@ update_ps_constants_userbuf(struct NineDevice9 *device)
     struct nine_state *state = &device->state;
     struct pipe_context *pipe = device->pipe;
     struct pipe_constant_buffer cb;
+    boolean several_constbufs = device->driver_caps.several_constbufs;
+
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = DETERMINE_CONSTBUFFER_SIZE(device, device->state.ps);
+
+    if (several_constbufs) {
+        if (state->changed.ps_const_i) {
+            cb.buffer_size = device->state.ps->num_int_consts_slots * 4 * sizeof(int32_t);
+            cb.user_buffer = device->state.ps_const_i;
+            if (cb.buffer_size)
+                pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 1, &cb);
+            state->changed.ps_const_i = FALSE;
+        }
+        if (state->changed.ps_const_b) {
+            cb.buffer_size = align(device->state.ps->num_bool_consts_slots, 4) * sizeof(int32_t);
+            cb.user_buffer = device->state.ps_const_b;
+            if (cb.buffer_size)
+                pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 2, &cb);
+            state->changed.ps_const_b = FALSE;
+        }
+        cb.buffer_size = device->state.ps->num_float_consts_slots * 4 * sizeof(float);
+    } else {
+        if (state->changed.ps_const_i) {
+            int32_t *idst = (int32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
+            memcpy(idst, state->ps_const_i, sizeof(state->ps_const_i));
+            state->changed.ps_const_i = FALSE;
+        }
+        if (state->changed.ps_const_b) {
+            uint32_t *idst = (uint32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
+            uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
+            memcpy(bdst, state->ps_const_b, sizeof(state->ps_const_b));
+            state->changed.ps_const_b = FALSE;
+        }
+        cb.buffer_size = DETERMINE_CONSTBUFFER_SIZE(device, device->state.ps);
+    }
+
     cb.user_buffer = device->state.ps_const_f;
 
     if (!cb.buffer_size)
         return;
-
-    if (state->changed.ps_const_i) {
-        int32_t *idst = (int32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
-        memcpy(idst, state->ps_const_i, sizeof(state->ps_const_i));
-        state->changed.ps_const_i = FALSE;
-    }
-    if (state->changed.ps_const_b) {
-        uint32_t *idst = (uint32_t *)&state->ps_const_f[4 * device->max_ps_const_f];
-        uint32_t *bdst = (uint32_t *)&idst[4 * NINE_MAX_CONST_I];
-        memcpy(bdst, state->ps_const_b, sizeof(state->ps_const_b));
-        state->changed.ps_const_b = FALSE;
-    }
 
     if (!device->driver_caps.user_cbufs) {
         u_upload_data(device->constbuf_uploader,

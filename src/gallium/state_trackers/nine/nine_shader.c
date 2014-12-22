@@ -454,6 +454,7 @@ struct shader_translator
     boolean lower_preds;
     boolean want_texcoord;
     boolean shift_wpos;
+    boolean several_constbufs;
     unsigned texcoord_sn;
 
     struct sm1_instruction insn; /* current instruction */
@@ -623,24 +624,6 @@ tx_src_scalar(struct ureg_dst dst)
     if (dst.WriteMask == (1 << c))
         src = ureg_scalar(src, c);
     return src;
-}
-
-/* Need to declare all constants if indirect addressing is used,
- * otherwise we could scan the shader to determine the maximum.
- * TODO: It doesn't really matter for nv50 so I won't do the scan,
- * but radeon drivers might care, if they don't infer it from TGSI.
- */
-static void
-tx_decl_constants(struct shader_translator *tx)
-{
-    unsigned i, n = 0;
-
-    for (i = 0; i < NINE_MAX_CONST_F; ++i)
-        ureg_DECL_constant(tx->ureg, n++);
-    for (i = 0; i < NINE_MAX_CONST_I; ++i)
-        ureg_DECL_constant(tx->ureg, n++);
-    for (i = 0; i < (NINE_MAX_CONST_B / 4); ++i)
-        ureg_DECL_constant(tx->ureg, n++);
 }
 
 static INLINE void
@@ -871,19 +854,30 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         assert(!param->rel);
         if (!tx_lconsti(tx, &src, param->idx)) {
             nine_info_mark_const_i_used(tx->info, param->idx);
-            src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                    tx->info->const_i_base + param->idx);
+            if (!tx->several_constbufs) {
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        tx->info->const_i_base + param->idx);
+            } else {
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        param->idx);
+                src = ureg_src_dimension(src, 1);
+            }
         }
         break;
     case D3DSPR_CONSTBOOL:
         assert(!param->rel);
         if (!tx_lconstb(tx, &src, param->idx)) {
-           char r = param->idx / 4;
-           char s = param->idx & 3;
-           nine_info_mark_const_b_used(tx->info, param->idx);
-           src = ureg_src_register(TGSI_FILE_CONSTANT,
-                                   tx->info->const_b_base + r);
-           src = ureg_swizzle(src, s, s, s, s);
+            char r = param->idx / 4;
+            char s = param->idx & 3;
+            nine_info_mark_const_b_used(tx->info, param->idx);
+            if (!tx->several_constbufs) {
+                src = ureg_src_register(TGSI_FILE_CONSTANT,
+                                        tx->info->const_b_base + r);
+            } else {
+                src = ureg_src_register(TGSI_FILE_CONSTANT, r);
+                src = ureg_src_dimension(src, 2);
+            }
+            src = ureg_swizzle(src, s, s, s, s);
         }
         break;
     case D3DSPR_LOOP:
@@ -2936,13 +2930,13 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
         hr = E_OUTOFMEMORY;
         goto out;
     }
-    tx_decl_constants(tx);
 
     tx->native_integers = GET_SHADER_CAP(INTEGERS);
     tx->inline_subroutines = !GET_SHADER_CAP(SUBROUTINES);
     tx->lower_preds = !GET_SHADER_CAP(MAX_PREDS);
     tx->want_texcoord = GET_CAP(TGSI_TEXCOORD);
     tx->shift_wpos = !GET_CAP(TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
+    tx->several_constbufs = device->driver_caps.several_constbufs;
     tx->texcoord_sn = tx->want_texcoord ?
         TGSI_SEMANTIC_TEXCOORD : TGSI_SEMANTIC_GENERIC;
 
@@ -2974,13 +2968,6 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
 
     if (IS_VS && !ureg_dst_is_undef(tx->regs.oPts))
         info->point_size = TRUE;
-
-    if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
-        unsigned count;
-        const struct tgsi_token *toks = ureg_get_tokens(tx->ureg, &count);
-        tgsi_dump(toks, 0);
-        ureg_free_tokens(toks);
-    }
 
     /* record local constants */
     if (tx->num_lconstf && tx->indirect_const_access) {
@@ -3042,6 +3029,31 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
 
     if (tx->indirect_const_access)
         info->num_float_consts_slots = NINE_MAX_CONST_F;
+
+    if (tx->several_constbufs) {
+        int i;
+        for (i = 0; i < info->num_float_consts_slots; i++)
+            ureg_DECL_constant(tx->ureg, i);
+        if (info->num_int_consts_slots)
+            ureg_DECL_constant2D(tx->ureg, 0, info->num_int_consts_slots-1, 1);
+        if (info->num_bool_consts_slots)
+            ureg_DECL_constant2D(tx->ureg, 0, info->num_bool_consts_slots-1, 2);
+    } else {
+        int i, n = info->num_float_consts_slots;
+        if (info->num_int_consts_slots)
+            n = tx->info->const_i_base + info->num_int_consts_slots;
+        if (info->num_bool_consts_slots)
+            n = tx->info->const_b_base + info->num_bool_consts_slots;
+        for (i = 0; i < n; i++)
+            ureg_DECL_constant(tx->ureg, i);
+    }
+
+    if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
+        unsigned count;
+        const struct tgsi_token *toks = ureg_get_tokens(tx->ureg, &count);
+        tgsi_dump(toks, 0);
+        ureg_free_tokens(toks);
+    }
 
     info->cso = ureg_create_shader_and_destroy(tx->ureg, device->pipe);
     if (!info->cso) {

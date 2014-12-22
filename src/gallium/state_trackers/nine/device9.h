@@ -110,6 +110,7 @@ struct NineDevice9
         boolean window_space_position_support;
         boolean vs_integer;
         boolean ps_integer;
+        boolean several_constbufs;
     } driver_caps;
 
     struct u_upload_mgr *vertex_uploader;
