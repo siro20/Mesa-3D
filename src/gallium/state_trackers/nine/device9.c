@@ -272,8 +272,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->driver_caps.vs_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.ps_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.several_constbufs = This->driver_caps.user_cbufs &&
-                                          pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_MAX_CONST_BUFFERS) >= 3 &&
-                                          pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_MAX_CONST_BUFFERS) >= 3;
+                                          pScreen->get_shader_param(pScreen, PIPE_SHADER_VERTEX, PIPE_SHADER_CAP_MAX_CONST_BUFFERS) >= 4 &&
+                                          pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_MAX_CONST_BUFFERS) >= 4;
 
     nine_ff_init(This); /* initialize fixed function code */
 

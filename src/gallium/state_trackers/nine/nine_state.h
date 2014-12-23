@@ -75,8 +75,9 @@
 #define NINE_STATE_FF_VSTRANSF (1 << 22)
 #define NINE_STATE_FF_PSSTAGES (1 << 23)
 #define NINE_STATE_FF_OTHER    (1 << 24)
+#define NINE_STATE_FOG         (1 << 25)
 #define NINE_STATE_ALL          0x1ffffff
-#define NINE_STATE_UNHANDLED   (1 << 25)
+#define NINE_STATE_UNHANDLED   (1 << 26)
 
 
 #define NINE_MAX_SIMULTANEOUS_RENDERTARGETS 4

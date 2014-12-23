@@ -485,6 +485,37 @@ update_ps_constants_userbuf(struct NineDevice9 *device)
 }
 
 static void
+update_fog(struct NineDevice9 *device)
+{
+    struct nine_state *state = &device->state;
+    struct pipe_context *pipe = device->pipe;
+    struct pipe_constant_buffer cb;
+    boolean several_constbufs = device->driver_caps.several_constbufs;
+    float *temp_buffer;
+
+    state->changed.group &= NINE_STATE_FOG;
+
+    if (!several_constbufs)
+        return; /* non-ff fog not supported */
+
+    cb.buffer = NULL;
+    cb.buffer_offset = 0;
+    temp_buffer = (float *) MALLOC(12 * sizeof(float));
+    temp_buffer[0] = (float)(state->rs[D3DRS_FOGENABLE]);
+    temp_buffer[1] = (float)(state->rs[D3DRS_FOGTABLEMODE]);
+    d3dcolor_to_rgba(&temp_buffer[4], state->rs[D3DRS_FOGCOLOR]);
+    temp_buffer[2] = asfloat(state->rs[D3DRS_FOGEND]);
+    temp_buffer[3] = 1.0f / (asfloat(state->rs[D3DRS_FOGEND]) - asfloat(state->rs[D3DRS_FOGSTART]));
+    temp_buffer[8] = asfloat(state->rs[D3DRS_FOGDENSITY]);
+    cb.user_buffer = temp_buffer;
+    cb.buffer_size = 3 * 4 * sizeof(float);
+
+    pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 3, &cb);
+
+    FREE((void *)temp_buffer);
+}
+
+static void
 update_vertex_buffers(struct NineDevice9 *device)
 {
     struct pipe_context *pipe = device->pipe;
@@ -745,6 +776,9 @@ nine_update_state(struct NineDevice9 *device, uint32_t mask)
     }
     if (state->changed.vtxbuf)
         update_vertex_buffers(device);
+
+    if (group & NINE_STATE_FOG)
+        update_fog(device);
 
     device->state.changed.group &= ~mask |
         (NINE_STATE_FF | NINE_STATE_VS_CONST | NINE_STATE_PS_CONST);
@@ -1123,14 +1157,14 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
     [D3DRS_ALPHAFUNC] = NINE_STATE_DSA,
     [D3DRS_DITHERENABLE] = NINE_STATE_RASTERIZER,
     [D3DRS_ALPHABLENDENABLE] = NINE_STATE_BLEND,
-    [D3DRS_FOGENABLE] = NINE_STATE_FF_OTHER,
+    [D3DRS_FOGENABLE] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
     [D3DRS_SPECULARENABLE] = NINE_STATE_FF_LIGHTING,
-    [D3DRS_FOGCOLOR] = NINE_STATE_FF_OTHER,
-    [D3DRS_FOGTABLEMODE] = NINE_STATE_FF_OTHER,
-    [D3DRS_FOGSTART] = NINE_STATE_FF_OTHER,
-    [D3DRS_FOGEND] = NINE_STATE_FF_OTHER,
-    [D3DRS_FOGDENSITY] = NINE_STATE_FF_OTHER,
-    [D3DRS_RANGEFOGENABLE] = NINE_STATE_FF_OTHER,
+    [D3DRS_FOGCOLOR] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
+    [D3DRS_FOGTABLEMODE] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
+    [D3DRS_FOGSTART] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
+    [D3DRS_FOGEND] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
+    [D3DRS_FOGDENSITY] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
+    [D3DRS_RANGEFOGENABLE] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
     [D3DRS_STENCILENABLE] = NINE_STATE_DSA,
     [D3DRS_STENCILFAIL] = NINE_STATE_DSA,
     [D3DRS_STENCILZFAIL] = NINE_STATE_DSA,
@@ -1151,7 +1185,7 @@ const uint32_t nine_render_state_group[NINED3DRS_LAST + 1] =
     [D3DRS_CLIPPING] = 0, /* software vertex processing only */
     [D3DRS_LIGHTING] = NINE_STATE_FF_LIGHTING,
     [D3DRS_AMBIENT] = NINE_STATE_FF_LIGHTING | NINE_STATE_FF_MATERIAL,
-    [D3DRS_FOGVERTEXMODE] = NINE_STATE_FF_OTHER,
+    [D3DRS_FOGVERTEXMODE] = NINE_STATE_FF_OTHER | NINE_STATE_FOG,
     [D3DRS_COLORVERTEX] = NINE_STATE_FF_LIGHTING,
     [D3DRS_LOCALVIEWER] = NINE_STATE_FF_LIGHTING,
     [D3DRS_NORMALIZENORMALS] = NINE_STATE_FF_OTHER,

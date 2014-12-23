@@ -1083,9 +1083,21 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         assert(param->idx >= 0 && param->idx < 4);
         assert(!param->rel);
         tx->info->rt_mask |= 1 << param->idx;
-        if (ureg_dst_is_undef(tx->regs.oCol[param->idx]))
-            tx->regs.oCol[param->idx] =
-               ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, param->idx);
+        if (ureg_dst_is_undef(tx->regs.oCol[param->idx])){
+            /* ps < 3: oCol[0] will have fog blending afterward
+             * vs < 3: oD1.w (D3DPMISCCAPS_FOGANDSPECULARALPHA) set to 0 even if set */
+            if (!IS_VS && tx->version.major < 3 && param->idx == 0) {
+                tx->regs.oCol[0] = ureg_DECL_temporary(tx->ureg);
+            } else if (IS_VS && tx->version.major < 3 && param->idx == 1) {
+                tx->regs.oCol[1] = ureg_DECL_temporary(tx->ureg);
+                dst = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, 1);
+                ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_XYZ), ureg_src(tx->regs.oCol[1]));
+                ureg_MOV(tx->ureg, ureg_writemask(dst, TGSI_WRITEMASK_W), ureg_imm1f(tx->ureg, 0.0f));
+            } else {
+                tx->regs.oCol[param->idx] =
+                    ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, param->idx);
+            }
+        }
         dst = tx->regs.oCol[param->idx];
         break;
     case D3DSPR_DEPTHOUT:
@@ -2872,6 +2884,78 @@ tgsi_processor_from_type(unsigned shader_type)
     }
 }
 
+static void
+shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
+{
+    struct ureg_dst tmp_cond, tmp_factor, fog_factor, output;
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst oCol0 = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
+    struct ureg_src fog_const1, fog_color, fog_const2, fog_enabled, fog_ps_mode, fog_end, fog_coeff, fog_density;
+    struct ureg_src fog_vs = ureg_scalar(ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_FOG, 0,
+                                         TGSI_INTERPOLATE_PERSPECTIVE), TGSI_SWIZZLE_X);
+    struct ureg_src depth = ureg_scalar(ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_POSITION, 0,
+                                        TGSI_INTERPOLATE_LINEAR), TGSI_SWIZZLE_Z);
+
+    if (!tx->several_constbufs) { /* fog stage not implemented */
+        ureg_MOV(ureg, oCol0, src_col);
+        return;
+    }
+
+    ureg_DECL_constant2D(tx->ureg, 0, 3, 3);
+
+    fog_const1 = ureg_src_register(TGSI_FILE_CONSTANT, 0);
+    fog_const1 = ureg_src_dimension(fog_const1, 3);
+    fog_color = ureg_src_register(TGSI_FILE_CONSTANT, 1);
+    fog_color = ureg_src_dimension(fog_color, 3);
+    fog_const2 = ureg_src_register(TGSI_FILE_CONSTANT, 2);
+    fog_const2 = ureg_src_dimension(fog_const2, 3);
+
+    fog_enabled = ureg_scalar(fog_const1, TGSI_SWIZZLE_X);
+    fog_ps_mode = ureg_scalar(fog_const1, TGSI_SWIZZLE_Y);
+    fog_end = ureg_scalar(fog_const1, TGSI_SWIZZLE_Z);
+    fog_coeff = ureg_scalar(fog_const1, TGSI_SWIZZLE_W);
+    fog_density = ureg_scalar(fog_const2, TGSI_SWIZZLE_X);
+
+    tmp_cond = tx_scratch_scalar(tx);
+    tmp_factor = tx_scratch_scalar(tx);
+    fog_factor = tx_scratch_scalar(tx);
+    output = tx_scratch(tx);
+
+    ureg_IF(ureg, fog_enabled, tx_cond(tx));
+    /* fog activated */
+    /* vertex fog (erased if pixel fog) in fog_vs */
+    /* linear fog */
+    ureg_SEQ(ureg, tmp_cond, fog_ps_mode, ureg_imm1f(ureg, 3.0f));
+    ureg_SUB(ureg, tmp_factor, fog_end, depth);
+    ureg_MUL(ureg, ureg_saturate(tmp_factor), tx_src_scalar(tmp_factor), fog_coeff);
+    /* if linear fog: fog_factor = result, else vs_fog */
+    ureg_CMP(ureg, fog_factor, ureg_negate(tx_src_scalar(tmp_cond)), tx_src_scalar(tmp_factor), fog_vs);
+    /* D3DFOG_EXP */
+    ureg_SEQ(ureg, tmp_cond, fog_ps_mode, ureg_imm1f(ureg, 1.0f));
+    ureg_MUL(ureg, tmp_factor, depth, fog_density);
+    ureg_MUL(ureg, tmp_factor, tx_src_scalar(tmp_factor), ureg_imm1f(ureg, -1.442695f));
+    ureg_EX2(ureg, tmp_factor, tx_src_scalar(tmp_factor));
+    /* if exp fog: fog_factor = result, else previous */
+    ureg_CMP(ureg, fog_factor, ureg_negate(tx_src_scalar(tmp_cond)), tx_src_scalar(tmp_factor), tx_src_scalar(fog_factor));
+    /* D3DFOG_EXP2 */
+    ureg_SEQ(ureg, tmp_cond, fog_ps_mode, ureg_imm1f(ureg, 2.0f));
+    ureg_MUL(ureg, tmp_factor, depth, fog_density);
+    ureg_MUL(ureg, tmp_factor, tx_src_scalar(tmp_factor), tx_src_scalar(tmp_factor));
+    ureg_MUL(ureg, tmp_factor, tx_src_scalar(tmp_factor), ureg_imm1f(ureg, -1.442695f));
+    ureg_EX2(ureg, tmp_factor, tx_src_scalar(tmp_factor));
+    /* if exp2 fog: fog_factor = result, else previous */
+    ureg_CMP(ureg, fog_factor, ureg_negate(tx_src_scalar(tmp_cond)), tx_src_scalar(tmp_factor), tx_src_scalar(fog_factor));
+    /* fog */
+    ureg_LRP(ureg, ureg_writemask(output, TGSI_WRITEMASK_XYZ), tx_src_scalar(fog_factor), src_col, fog_color);
+    ureg_MOV(ureg, ureg_writemask(output, TGSI_WRITEMASK_W), src_col);
+    ureg_ELSE(ureg, tx_elsecond(tx));
+    /* no fog */
+    ureg_MOV(ureg, output, src_col);
+    tx_endcond(tx);
+    ureg_ENDIF(ureg);
+    ureg_MOV(ureg, oCol0, ureg_src(output));
+}
+
 #define GET_CAP(n) device->screen->get_param( \
       device->screen, PIPE_CAP_##n)
 #define GET_SHADER_CAP(n) device->screen->get_shader_param( \
@@ -2935,10 +3019,19 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info)
         sm1_parse_instruction(tx);
     tx->parse++; /* for byte_size */
 
-    if (IS_PS && (tx->version.major < 2) && tx->num_temp) {
-        ureg_MOV(tx->ureg, ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_COLOR, 0),
-                 ureg_src(tx->regs.r[0]));
-        info->rt_mask |= 0x1;
+    if (IS_PS && tx->version.major < 3) {
+        if (tx->version.major < 2) {
+            assert(tx->num_temp); /* there must be color output */
+            info->rt_mask |= 0x1;
+            shader_add_ps_fog_stage(tx, ureg_src(tx->regs.r[0]));
+        } else {
+            shader_add_ps_fog_stage(tx, ureg_src(tx->regs.oCol[0]));
+        }
+    }
+
+    if (IS_VS && tx->version.major < 3 && ureg_dst_is_undef(tx->regs.oFog)) {
+        tx->regs.oFog = ureg_DECL_output(tx->ureg, TGSI_SEMANTIC_FOG, 0);
+        ureg_MOV(tx->ureg, ureg_writemask(tx->regs.oFog, TGSI_WRITEMASK_X), ureg_imm1f(tx->ureg, 0.0f));
     }
 
     if (info->position_t)
