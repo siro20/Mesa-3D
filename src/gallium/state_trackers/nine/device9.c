@@ -681,6 +681,9 @@ NineDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
 
     user_assert(pPresentationParameters, D3DERR_INVALIDCALL);
 
+    if (!pPresentationParameters->hDeviceWindow)
+        pPresentationParameters->hDeviceWindow = This->params.hFocusWindow;
+
     hr = ID3DPresentGroup_CreateAdditionalPresent(This->present, pPresentationParameters, &present);
 
     if (FAILED(hr))
