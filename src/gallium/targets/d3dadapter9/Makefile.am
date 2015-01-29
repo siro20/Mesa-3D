@@ -55,7 +55,8 @@ pkgconfig_DATA = d3d.pc
 
 d3dadapter9_la_SOURCES = \
 	getproc.c \
-	drm.c
+	drm.c \
+	identifier.c
 
 d3dadapter9_la_LDFLAGS = \
 	-shared \
