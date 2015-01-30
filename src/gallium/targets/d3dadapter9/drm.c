@@ -63,19 +63,14 @@ DRI_CONF_BEGIN
     DRI_CONF_SECTION_END
 DRI_CONF_END;
 
-/* Regarding os versions, we should not define our own as that would simply be
- * weird. Defaulting to Win2k/XP seems sane considering the origin of D3D9. The
- * driver also defaults to being a generic D3D9 driver, which of course only
- * matters if you're actually using the DDI. */
-#define VERSION_HIGH    VERSION_DWORD(0x0006, 0x000E) /* winxp, d3d9 */
-#define VERSION_LOW     VERSION_DWORD(0x0000, 0x0001) /* version, build */
-
 struct d3dadapter9drm_context
 {
     struct d3dadapter9_context base;
     struct pipe_loader_device *dev, *swdev;
     int fd;
 };
+
+extern void d3d_fill_driver(const char* name, D3DADAPTER_IDENTIFIER9* drvid);
 
 static void
 drm_destroy( struct d3dadapter9_context *ctx )
@@ -170,32 +165,13 @@ read_descriptor( struct d3dadapter9_context *ctx,
     get_bus_info(fd, &drvid->VendorId, &drvid->DeviceId,
                  &drvid->SubSysId, &drvid->Revision);
 
-    strncpy(drvid->Driver, "libd3dadapter9.so", sizeof(drvid->Driver));
     strncpy(drvid->DeviceName, ctx->hal->get_name(ctx->hal), 32);
-    snprintf(drvid->Description, sizeof(drvid->Description),
-             "Gallium 0.4 with %s", ctx->hal->get_vendor(ctx->hal));
 
-    drvid->DriverVersionLowPart = VERSION_LOW;
-    drvid->DriverVersionHighPart = VERSION_HIGH;
+    /* Fill in driver and card name.
+     * For unknown vendors/cards a fake card is returned. */
+    d3d_fill_driver(ctx->hal->get_name(ctx->hal), drvid);
 
-    /* To make a pseudo-real GUID we use the PCI bus data and some string */
-    drvid->DeviceIdentifier.Data1 = drvid->VendorId;
-    drvid->DeviceIdentifier.Data2 = drvid->DeviceId;
-    drvid->DeviceIdentifier.Data3 = drvid->SubSysId;
-    memcpy(drvid->DeviceIdentifier.Data4, "Gallium3D", 8);
-
-    drvid->WHQLLevel = 1; /* This fakes WHQL validaion */
-
-    /* XXX Fake NVIDIA binary driver on Windows.
-     *
-     * OS version: 4=95/98/NT4, 5=2000, 6=2000/XP, 7=Vista, 8=Win7
-     */
-    strncpy(drvid->Driver, "nvd3dum.dll", sizeof(drvid->Driver));
-    strncpy(drvid->Description, "NVIDIA GeForce GTX 680", sizeof(drvid->Description));
-    drvid->DriverVersionLowPart = VERSION_DWORD(12, 6658); /* minor, build */
-    drvid->DriverVersionHighPart = VERSION_DWORD(6, 15); /* OS, major */
-    drvid->SubSysId = 0;
-    drvid->Revision = 0;
+    /* This is the D3D GUID */
     drvid->DeviceIdentifier.Data1 = 0xaeb2cdd4;
     drvid->DeviceIdentifier.Data2 = 0x6e41;
     drvid->DeviceIdentifier.Data3 = 0x43ea;
@@ -207,6 +183,8 @@ read_descriptor( struct d3dadapter9_context *ctx,
     drvid->DeviceIdentifier.Data4[5] = 0x76;
     drvid->DeviceIdentifier.Data4[6] = 0x07;
     drvid->DeviceIdentifier.Data4[7] = 0x81;
+
+    /* this driver isn't WHQL certified */
     drvid->WHQLLevel = 0;
 }
 
