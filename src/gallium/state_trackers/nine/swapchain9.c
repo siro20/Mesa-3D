@@ -145,6 +145,30 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         pParams->FullScreen_RefreshRateInHz,
         pParams->PresentationInterval);
 
+    /* convert MultisampleQuality to maskable format */
+    if (pParams->MultiSampleType == D3DMULTISAMPLE_NONMASKABLE)
+    {
+        unsigned bind;
+        if (depth_stencil_format(pParams->BackBufferFormat))
+            bind = d3d9_get_pipe_depth_format_bindings(pParams->BackBufferFormat);
+        else /* render-target */
+            bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
+                   PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
+
+        pParams->MultiSampleType = 0;
+        for (i=D3DMULTISAMPLE_2_SAMPLES; i<D3DMULTISAMPLE_16_SAMPLES
+                && pParams->MultiSampleQuality; i++)
+        {
+            pf = d3d9_to_pipe_format_checked(This->screen, pParams->BackBufferFormat, PIPE_TEXTURE_2D,
+                                         i, bind, FALSE);
+            if (pf != PIPE_FORMAT_NONE)
+            {
+                pParams->MultiSampleQuality--;
+                pParams->MultiSampleType = i;
+            }
+        }
+    }
+
     if (pParams->SwapEffect == D3DSWAPEFFECT_COPY &&
         pParams->BackBufferCount > 1) {
         pParams->BackBufferCount = 1;

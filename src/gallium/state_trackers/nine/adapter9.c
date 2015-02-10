@@ -386,7 +386,25 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
     }
 
     if (pQualityLevels)
-        *pQualityLevels = 1; /* gallium doesn't have quality levels */
+    {
+        *pQualityLevels = 1;
+        /* The quality levels are vendor dependent.
+         * Every quality level has its own sample count and sample
+         * position matrix.
+         * Tomb Raider: Legend depends on this value being at least 4
+         */
+        if (MultiSampleType == D3DMULTISAMPLE_NONMASKABLE)
+        {
+            int i;
+            for (i=D3DMULTISAMPLE_2_SAMPLES; i<D3DMULTISAMPLE_16_SAMPLES; i++)
+            {
+                pf = d3d9_to_pipe_format_checked(screen, SurfaceFormat, PIPE_TEXTURE_2D,
+                                                 i, bind, FALSE);
+                if (pf != PIPE_FORMAT_NONE)
+                    (*pQualityLevels)++;
+            }
+        }
+    }
 
     return D3D_OK;
 }

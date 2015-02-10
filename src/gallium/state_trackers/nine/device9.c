@@ -1055,6 +1055,32 @@ create_zs_or_rt_surface(struct NineDevice9 *This,
     user_assert(Width && Height, D3DERR_INVALIDCALL);
     user_assert(Pool != D3DPOOL_MANAGED, D3DERR_INVALIDCALL);
 
+    /* convert MultisampleQuality to maskable format */
+    if (MultiSample == D3DMULTISAMPLE_NONMASKABLE)
+    {
+        enum pipe_format pf;
+        unsigned i, bind;
+
+        if (depth_stencil_format(Format))
+            bind = d3d9_get_pipe_depth_format_bindings(Format);
+        else /* render-target */
+            bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_TRANSFER_READ |
+                   PIPE_BIND_TRANSFER_WRITE | PIPE_BIND_RENDER_TARGET;
+
+        MultiSample = 0;
+        for (i=D3DMULTISAMPLE_2_SAMPLES; i<D3DMULTISAMPLE_16_SAMPLES
+                && MultisampleQuality; i++)
+        {
+            pf = d3d9_to_pipe_format_checked(screen, Format, PIPE_TEXTURE_2D,
+                                         i, bind, FALSE);
+            if (pf != PIPE_FORMAT_NONE)
+            {
+                MultisampleQuality--;
+                MultiSample = i;
+            }
+        }
+    }
+
     templ.target = PIPE_TEXTURE_2D;
     templ.width0 = Width;
     templ.height0 = Height;
