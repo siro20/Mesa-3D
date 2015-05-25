@@ -236,7 +236,7 @@ d3d_match_vendor_id( D3DADAPTER_IDENTIFIER9* drvid,
         drvid->VendorId == HW_VENDOR_NVIDIA)
         return;
 
-    DBG("unknown vendor 0x4%x, emulating 0x4%x\n", drvid->VendorId, fallback_ven);
+    DBG("unknown vendor 0x%04x, emulating 0x%04x\n", drvid->VendorId, fallback_ven);
     drvid->VendorId = fallback_ven;
     drvid->DeviceId = fallback_dev;
     strncpy(drvid->Description, fallback_name, sizeof(drvid->Description));

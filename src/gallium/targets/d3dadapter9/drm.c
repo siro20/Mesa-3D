@@ -74,9 +74,9 @@ struct fallback_card_config {
 /* prototypes */
 void
 d3d_match_vendor_id( D3DADAPTER_IDENTIFIER9* drvid,
-		unsigned fallback_ven,
-		unsigned fallback_dev,
-		const char* fallback_name );
+        unsigned fallback_ven,
+        unsigned fallback_dev,
+        const char* fallback_name );
 
 void d3d_fill_driver_version(D3DADAPTER_IDENTIFIER9* drvid);
 
