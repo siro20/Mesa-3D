@@ -523,7 +523,7 @@ NineDevice9_ResumeRecording( struct NineDevice9 *This )
 HRESULT WINAPI
 NineDevice9_TestCooperativeLevel( struct NineDevice9 *This )
 {
-    return D3D_OK; /* TODO */
+    return This->cooperativelevel;
 }
 
 UINT WINAPI
@@ -761,7 +761,7 @@ NineDevice9_Reset( struct NineDevice9 *This,
         D3DPRESENT_PARAMETERS *params = &pPresentationParameters[i];
         hr = NineSwapChain9_Resize(This->swapchains[i], params, NULL);
         if (hr != D3D_OK)
-            return hr;
+            break;
     }
 
     nine_pipe_context_clear(This);
@@ -772,6 +772,10 @@ NineDevice9_Reset( struct NineDevice9 *This,
         This, 0, (IDirect3DSurface9 *)This->swapchains[0]->buffers[0]);
     /* XXX: better use GetBackBuffer here ? */
 
+    if (hr != D3D_OK)
+        This->cooperativelevel = D3DERR_DEVICENOTRESET;
+    else
+        This->cooperativelevel = D3D_OK;
     return hr;
 }
 
