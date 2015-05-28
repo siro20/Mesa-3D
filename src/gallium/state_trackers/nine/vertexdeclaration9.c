@@ -292,7 +292,7 @@ NineVertexDeclaration9_new_from_fvf( struct NineDevice9 *pDevice,
 
             betas = (((FVF & D3DFVF_XYZB5)-D3DFVF_XYZB1)>>1)+1;
             if (FVF & D3DFVF_LASTBETA_D3DCOLOR) {
-                beta_index = D3DDECLTYPE_D3DCOLOR;
+                beta_index = (betas == 2) ? D3DDECLTYPE_UBYTE4 : D3DDECLTYPE_D3DCOLOR;
             } else if (FVF & D3DFVF_LASTBETA_UBYTE4) {
                 beta_index = D3DDECLTYPE_UBYTE4;
             } else if ((FVF & D3DFVF_XYZB5) == D3DFVF_XYZB5) {
@@ -302,7 +302,9 @@ NineVertexDeclaration9_new_from_fvf( struct NineDevice9 *pDevice,
 
             if (betas > 0) {
                 switch (betas) {
-                    case 1: elems[nelems].Type = D3DDECLTYPE_FLOAT1; break;
+                    case 1: elems[nelems].Type = (FVF & D3DFVF_LASTBETA_D3DCOLOR) ?
+                                    D3DDECLTYPE_D3DCOLOR : D3DDECLTYPE_FLOAT1;
+                    break;
                     case 2: elems[nelems].Type = D3DDECLTYPE_FLOAT2; break;
                     case 3: elems[nelems].Type = D3DDECLTYPE_FLOAT3; break;
                     case 4: elems[nelems].Type = D3DDECLTYPE_FLOAT4; break;
