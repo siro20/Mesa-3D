@@ -134,7 +134,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
                   ID3DPresentGroup *pPresentationGroup,
                   struct d3dadapter9_context *pCTX,
                   boolean ex,
-                  D3DDISPLAYMODEEX *pFullscreenDisplayMode )
+                  D3DDISPLAYMODEEX *pFullscreenDisplayMode,
+                  int minorVersionNum )
 {
     unsigned i;
     HRESULT hr = NineUnknown_ctor(&This->base, pParams);
@@ -155,6 +156,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->params = *pCreationParameters;
     This->ex = ex;
     This->present = pPresentationGroup;
+    This->minor_version_num = minorVersionNum;
+
     IDirect3D9_AddRef(This->d3d9);
     ID3DPresentGroup_AddRef(This->present);
 
@@ -525,7 +528,14 @@ NineDevice9_ResumeRecording( struct NineDevice9 *This )
 HRESULT WINAPI
 NineDevice9_TestCooperativeLevel( struct NineDevice9 *This )
 {
-    return D3D_OK; /* TODO */
+    if (NineSwapChain9_GetOccluded(This->swapchains[0])) {
+        This->device_needs_reset = TRUE;
+        return D3DERR_DEVICELOST;
+    } else if (This->device_needs_reset) {
+        return D3DERR_DEVICENOTRESET;
+    }
+
+    return D3D_OK;
 }
 
 UINT WINAPI
@@ -759,11 +769,16 @@ NineDevice9_Reset( struct NineDevice9 *This,
 
     DBG("This=%p pPresentationParameters=%p\n", This, pPresentationParameters);
 
+    if (NineSwapChain9_GetOccluded(This->swapchains[0])) {
+        This->device_needs_reset = TRUE;
+        return D3DERR_DEVICELOST;
+    }
+
     for (i = 0; i < This->nswapchains; ++i) {
         D3DPRESENT_PARAMETERS *params = &pPresentationParameters[i];
         hr = NineSwapChain9_Resize(This->swapchains[i], params, NULL);
         if (hr != D3D_OK)
-            return hr;
+            break;
     }
 
     nine_pipe_context_clear(This);
@@ -774,6 +789,7 @@ NineDevice9_Reset( struct NineDevice9 *This,
         This, 0, (IDirect3DSurface9 *)This->swapchains[0]->buffers[0]);
     /* XXX: better use GetBackBuffer here ? */
 
+    This->device_needs_reset = (hr != D3D_OK);
     return hr;
 }
 
@@ -789,6 +805,12 @@ NineDevice9_Present( struct NineDevice9 *This,
 
     DBG("This=%p pSourceRect=%p pDestRect=%p hDestWindowOverride=%p pDirtyRegion=%p\n",
         This, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+
+    if (NineSwapChain9_GetOccluded(This->swapchains[0])) {
+        This->device_needs_reset = TRUE;
+    }
+
+    user_assert(!This->device_needs_reset, D3DERR_DEVICELOST);
 
     /* XXX is this right? */
     for (i = 0; i < This->nswapchains; ++i) {
@@ -4022,7 +4044,8 @@ NineDevice9_new( struct pipe_screen *pScreen,
                  struct d3dadapter9_context *pCTX,
                  boolean ex,
                  D3DDISPLAYMODEEX *pFullscreenDisplayMode,
-                 struct NineDevice9 **ppOut )
+                 struct NineDevice9 **ppOut,
+                 int minorVersionNum )
 {
     BOOL lock;
     lock = !!(pCreationParameters->BehaviorFlags & D3DCREATE_MULTITHREADED);
@@ -4030,5 +4053,5 @@ NineDevice9_new( struct pipe_screen *pScreen,
     NINE_NEW(Device9, ppOut, lock, /* args */
              pScreen, pCreationParameters, pCaps,
              pPresentationParameters, pD3D9, pPresentationGroup, pCTX,
-             ex, pFullscreenDisplayMode);
+             ex, pFullscreenDisplayMode, minorVersionNum );
 }
