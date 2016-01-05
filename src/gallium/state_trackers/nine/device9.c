@@ -39,7 +39,6 @@
 #include "nine_ff.h"
 #include "nine_dump.h"
 #include "nine_limits.h"
-
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "pipe/p_config.h"
@@ -52,6 +51,7 @@
 #include "hud/hud_context.h"
 
 #include "cso_cache/cso_context.h"
+#include "nine_csmt.h"
 
 #define DBG_CHANNEL DBG_DEVICE
 
@@ -193,6 +193,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
     /* When may_swvp, SetConstant* limits are different */
     if (This->may_swvp)
         This->caps.MaxVertexShaderConst = NINE_MAX_CONST_F_SWVP;
+
+    This->pure = !!(pCreationParameters->BehaviorFlags & D3DCREATE_PUREDEVICE);
 
     This->pipe = This->screen->context_create(This->screen, NULL, 0);
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
@@ -456,6 +458,12 @@ NineDevice9_ctor( struct NineDevice9 *This,
         This->pipe->set_polygon_stipple(This->pipe, &stipple);
     }
 
+    if (This->pure) {
+        This->csmt_context = nine_csmt_create(This);
+        if (!This->csmt_context) { return E_OUTOFMEMORY; }
+        nine_csmt_reset(This);
+    }
+
     This->update = &This->state;
     nine_update_state(This);
 
@@ -480,6 +488,9 @@ NineDevice9_dtor( struct NineDevice9 *This )
     nine_state_destroy_sw(This);
     nine_state_clear(&This->state, TRUE);
 
+    if (This->csmt_context) {
+        nine_csmt_destroy(This, This->csmt_context);
+    }
     if (This->vertex_uploader)
         u_upload_destroy(This->vertex_uploader);
     if (This->index_uploader)
@@ -866,6 +877,9 @@ NineDevice9_Present( struct NineDevice9 *This,
                                     hDestWindowOverride, pDirtyRegion, 0);
         if (FAILED(hr)) { return hr; }
     }
+
+    NineDevice9_SetRenderTarget(
+        This, 0, (IDirect3DSurface9 *)This->swapchains[0]->buffers[0]);
 
     return D3D_OK;
 }
@@ -4165,10 +4179,17 @@ NineDevice9_new( struct pipe_screen *pScreen,
                  struct NineDevice9 **ppOut,
                  int minorVersionNum )
 {
-    BOOL lock;
+    BOOL lock, pure;
     lock = !!(pCreationParameters->BehaviorFlags & D3DCREATE_MULTITHREADED);
+    pure = !!(pCreationParameters->BehaviorFlags & D3DCREATE_PUREDEVICE);
 
-    NINE_NEW(Device9, ppOut, lock, /* args */
+    pure &= !!getenv("D3D_ENABLE_CSMT");
+    if (pure)
+        ERR("\033[1;31m\nEnabling CSMT on PURE device.\033[0m\n\n");
+    else
+        pCreationParameters->BehaviorFlags &= ~D3DCREATE_PUREDEVICE;
+
+    NINE_NEW(Device9, ppOut, lock, pure, /* args */
              pScreen, pCreationParameters, pCaps,
              pPresentationParameters, pD3D9, pPresentationGroup, pCTX,
              ex, pFullscreenDisplayMode, minorVersionNum );

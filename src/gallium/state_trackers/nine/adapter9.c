@@ -1117,5 +1117,5 @@ HRESULT
 NineAdapter9_new( struct d3dadapter9_context *pCTX,
                   struct NineAdapter9 **ppOut )
 {
-    NINE_NEW(Adapter9, ppOut, FALSE, /* args */ pCTX);
+    NINE_NEW(Adapter9, ppOut, FALSE, FALSE, /* args */ pCTX);
 }

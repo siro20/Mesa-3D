@@ -26,6 +26,7 @@
 #include "pipe/p_compiler.h"
 
 #include "util/u_memory.h"
+#include "util/u_atomic.h"
 
 #include "guid.h"
 #include "nine_flags.h"
@@ -120,14 +121,14 @@ NineUnknown_FreePrivateData( struct NineUnknown *This,
 static inline void
 NineUnknown_Destroy( struct NineUnknown *This )
 {
-    assert(!(This->refs | This->bind));
+    assert(!(p_atomic_read(&This->refs) | p_atomic_read(&This->bind)));
     This->dtor(This);
 }
 
 static inline UINT
 NineUnknown_Bind( struct NineUnknown *This )
 {
-    UINT b = ++This->bind;
+    UINT b = p_atomic_inc_return(&This->bind);
     assert(b);
     if (b == 1 && This->container) {
         if (This->container != NineUnknown(This->device))
@@ -139,13 +140,13 @@ NineUnknown_Bind( struct NineUnknown *This )
 static inline UINT
 NineUnknown_Unbind( struct NineUnknown *This )
 {
-    UINT b = --This->bind;
+    UINT b = p_atomic_dec_return(&This->bind);
     if (!b) {
         if (This->container) {
             if (This->container != NineUnknown(This->device))
                 NineUnknown_Unbind(This->container);
         } else
-        if (This->refs == 0) {
+        if (p_atomic_read(&This->refs) == 0) {
             This->dtor(This);
         }
     }
@@ -164,12 +165,12 @@ static inline void
 NineUnknown_Detach( struct NineUnknown *This )
 {
     assert(This->container && !This->forward);
-    if (This->refs)
+    if (p_atomic_read(&This->refs))
         NineUnknown_Unbind(This->container);
-    if (This->bind)
+    if (p_atomic_read(&This->bind))
         NineUnknown_Unbind(This->container);
     This->container = NULL;
-    if (!(This->refs | This->bind))
+    if (!(p_atomic_read(&This->refs) | p_atomic_read(&This->bind)))
         This->dtor(This);
 }
 

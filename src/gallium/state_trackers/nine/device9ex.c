@@ -447,10 +447,17 @@ NineDevice9Ex_new( struct pipe_screen *pScreen,
                    struct NineDevice9Ex **ppOut,
                    int minorVersionNum )
 {
-    BOOL lock;
+    BOOL lock, pure;
     lock = !!(pCreationParameters->BehaviorFlags & D3DCREATE_MULTITHREADED);
+    pure = !!(pCreationParameters->BehaviorFlags & D3DCREATE_PUREDEVICE);
 
-    NINE_NEW(Device9Ex, ppOut, lock,
+    pure &= !!getenv("D3D_ENABLE_CSMT");
+    if (pure)
+        ERR("\033[1;31m\nEnabling CSMT on PURE device.\033[0m\n\n");
+    else
+        pCreationParameters->BehaviorFlags &= ~D3DCREATE_PUREDEVICE;
+
+    NINE_NEW(Device9Ex, ppOut, lock, pure,
              pScreen, pCreationParameters, pCaps, pPresentationParameters,
              pFullscreenDisplayMode, pD3D9Ex, pPresentationGroup, pCTX, minorVersionNum );
 }

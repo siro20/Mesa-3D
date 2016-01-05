@@ -25,6 +25,7 @@
 
 #include "iunknown.h"
 #include "nine_lock.h"
+#include "nine_csmt.h"
 
 /*
  * Note: we use these function rather than the MIN2, MAX2, CLAMP macros to
@@ -82,7 +83,13 @@ static inline void _nine_bind(void **dst, void *obj)
         memset(__data, 0, sizeof(struct Nine##nine)); \
         if (!__data) { return E_OUTOFMEMORY; } \
          \
-        __params.vtable = ((dev)->params.BehaviorFlags & D3DCREATE_MULTITHREADED) ? &Lock##nine##_vtable : &Nine##nine##_vtable; \
+        if ((dev)->params.BehaviorFlags & D3DCREATE_PUREDEVICE) { \
+            __params.vtable = &Pure##nine##_vtable; \
+        } else if ((dev)->params.BehaviorFlags & D3DCREATE_MULTITHREADED) { \
+            __params.vtable = &Lock##nine##_vtable; \
+        } else { \
+            __params.vtable = &Nine##nine##_vtable; \
+        } \
         __params.guids = Nine##nine##_IIDs; \
         __params.dtor = (void *)Nine##nine##_dtor; \
         __params.container = NULL; \
@@ -99,7 +106,7 @@ static inline void _nine_bind(void **dst, void *obj)
     } \
     return D3D_OK
 
-#define NINE_NEW(nine, out, lock, ...) \
+#define NINE_NEW(nine, out, lock, pure, ...) \
     { \
         struct NineUnknownParams __params; \
         struct Nine##nine *__data; \
@@ -107,7 +114,13 @@ static inline void _nine_bind(void **dst, void *obj)
         __data = CALLOC_STRUCT(Nine##nine); \
         if (!__data) { return E_OUTOFMEMORY; } \
          \
-        __params.vtable = (lock) ? &Lock##nine##_vtable : &Nine##nine##_vtable; \
+        if (pure) { \
+            __params.vtable = &Pure##nine##_vtable; \
+        } else if (lock) { \
+            __params.vtable = &Lock##nine##_vtable; \
+        } else { \
+            __params.vtable = &Nine##nine##_vtable; \
+        } \
         __params.guids = Nine##nine##_IIDs; \
         __params.dtor = (void *)Nine##nine##_dtor; \
         __params.container = NULL; \

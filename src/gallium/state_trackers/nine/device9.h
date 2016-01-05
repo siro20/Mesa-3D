@@ -30,6 +30,7 @@
 
 #include "nine_helpers.h"
 #include "nine_state.h"
+#include "nine_csmt.h"
 
 struct gen_mipmap_state;
 struct util_hash_table;
@@ -38,6 +39,8 @@ struct pipe_context;
 struct cso_context;
 struct hud_context;
 struct u_upload_mgr;
+
+struct csmt_context;
 
 struct NineSwapChain9;
 struct NineStateBlock9;
@@ -48,7 +51,12 @@ struct NineDevice9
 {
     struct NineUnknown base;
     boolean ex;
+
     boolean may_swvp;
+    boolean pure;
+
+    /* CSMT context */
+    struct csmt_context *csmt_context;
 
     /* G3D context */
     struct pipe_screen *screen;
