@@ -47,6 +47,11 @@ C_SOURCES := \
 	nine_shader.h \
 	nine_state.c \
 	nine_state.h \
+	nine_queue.c \
+	nine_queue.h \
+	nine_csmt_pipe.c \
+	nine_csmt_pipe.h \
+	nine_csmt_structs.h \
 	pixelshader9.c \
 	pixelshader9.h \
 	query9.c \

@@ -39,7 +39,6 @@
 #include "nine_ff.h"
 #include "nine_dump.h"
 #include "nine_limits.h"
-
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
 #include "pipe/p_config.h"
@@ -52,6 +51,7 @@
 #include "hud/hud_context.h"
 
 #include "cso_cache/cso_context.h"
+#include "nine_csmt_pipe.h"
 
 #define DBG_CHANNEL DBG_DEVICE
 
@@ -170,7 +170,9 @@ NineDevice9_ctor( struct NineDevice9 *This,
     if (This->params.BehaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING)
         DBG("Application asked mixed Software Vertex Processing. Ignoring.\n");
 
-    This->pipe = This->screen->context_create(This->screen, NULL, 0);
+    This->pipe = nine_csmt_context_create(This->screen);
+    //This->pipe = This->screen->context_create(This->screen, NULL, 0);
+
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
 
     This->cso = cso_create_context(This->pipe);
@@ -407,7 +409,6 @@ NineDevice9_ctor( struct NineDevice9 *This,
     }
 
     /* Allocate upload helper for drivers that suck (from st pov ;). */
-
     This->driver_caps.user_vbufs = GET_PCAP(USER_VERTEX_BUFFERS);
     This->driver_caps.user_ibufs = GET_PCAP(USER_INDEX_BUFFERS);
     This->driver_caps.user_cbufs = GET_PCAP(USER_CONSTANT_BUFFERS);

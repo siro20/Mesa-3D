@@ -894,7 +894,6 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
                       TGSI_INTERPOLATE_LOC_CENTROID : 0,
                     0, 1);
             } else {
-                assert(!param->rel); /* TODO */
                 assert(param->idx < Elements(tx->regs.v));
                 src = tx->regs.v[param->idx];
             }

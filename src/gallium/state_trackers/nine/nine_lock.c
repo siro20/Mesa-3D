@@ -48,7 +48,8 @@
 
 /* Global mutex as described by MSDN */
 pipe_static_mutex(d3dlock_global);
-
+#define pipe_mutex_lock
+#define pipe_mutex_unlock
 static HRESULT NINE_WINAPI
 LockAuthenticatedChannel9_GetCertificateSize( struct NineAuthenticatedChannel9 *This,
                                               UINT *pCertificateSize )
