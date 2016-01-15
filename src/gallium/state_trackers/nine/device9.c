@@ -171,7 +171,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         DBG("Application asked mixed Software Vertex Processing. Ignoring.\n");
 
     This->pipe = nine_csmt_context_create(This->screen);
-    //This->pipe = This->screen->context_create(This->screen, NULL, 0);
+   // This->pipe = This->screen->context_create(This->screen, NULL, 0);
 
     if (!This->pipe) { return E_OUTOFMEMORY; } /* guess */
 

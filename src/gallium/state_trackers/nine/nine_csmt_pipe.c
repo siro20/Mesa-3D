@@ -92,6 +92,7 @@ nine_csmt_draw_vbo_tx(struct pipe_context *pctx,
         set_slot_ready_and_wait(ctx->queue, slot);
     } else {
         set_slot_ready(ctx->queue, slot);
+        signal_process_start(ctx->queue);
     }
 }
 
@@ -1725,11 +1726,11 @@ nine_csmt_transfer_map_tx(struct pipe_context *pctx,
     /* return wrapper object */
     *out_transfer = (struct pipe_transfer *)transfer;
 
-    if (!(usage & PIPE_TRANSFER_READ)) {
-        /* broken */
+    /* read write buffer: transfer_map always maps the whole buffer ! */
+    if (!(usage & (PIPE_TRANSFER_READ | PIPE_TRANSFER_PERSISTENT))) {
+#if 0
         if (resource->target == PIPE_BUFFER) {
-            size = box->width;
-
+            size = box->width; /* hack for broken FFXIV */
             pipe_resource_reference(&transfer->transfer.resource, resource);
             transfer->transfer.box = *box;
             transfer->transfer.level = level;
@@ -1782,9 +1783,10 @@ nine_csmt_transfer_map_tx(struct pipe_context *pctx,
 
             return transfer->data;
         }
+#endif
     }
 
-    /* need to wait */
+    /* READ or unhandled, need to wait */
     slot = get_free_slot(ctx->queue, 0, NULL);
     slot->func = nine_csmt_transfer_map_rx;
     slot->data = &arg;
@@ -1838,7 +1840,7 @@ static void
 nine_csmt_transfer_unmap_tx(struct pipe_context *pctx,
                             struct pipe_transfer *data) {
     struct pipe_context_csmt *ctx = (struct pipe_context_csmt *)pctx;
-    struct queue_element* slot;
+    struct queue_element *slot;
     struct csmt_transfer *transfer = data;
     struct csmt_transfer_inline_write *arg = NULL;
 
@@ -1867,6 +1869,8 @@ nine_csmt_transfer_unmap_tx(struct pipe_context *pctx,
         set_slot_ready(ctx->queue, slot);
     }
     FREE(transfer);
+
+    DBG("done\n");
 }
 
 static void

@@ -26,7 +26,7 @@
 #include "util/macros.h"
 #include "nine_helpers.h"
 
-#define NINE_QUEUE_SIZE (1024)
+#define NINE_QUEUE_SIZE (128)
 #define NINE_QUEUE_MASK (NINE_QUEUE_SIZE - 1)
 
 #define NINE_QUEUE_POOL_SIZE (1024 * 1024)
@@ -40,7 +40,7 @@
 }
 
 #define LEAVE_CRITICAL_SECTION() { \
-p_atomic_dec(&ctx->crit_section); \
+    p_atomic_dec(&ctx->crit_section); \
 }
 
 #define WAIT_FOR_FREE_SLOT() { \
@@ -67,7 +67,6 @@ static unsigned get_free_pool_size(struct concurrent_queue* ctx) {
 }
 
 static void nop(struct pipe_context_csmt *a, void *b) { (void)a; (void)b;}
-void signal_process_start(struct concurrent_queue* ctx);
 
 static int max_mem = 0;
 struct queue_element*

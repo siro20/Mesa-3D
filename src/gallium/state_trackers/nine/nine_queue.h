@@ -37,6 +37,7 @@ struct queue_element* wait_slot_ready(struct concurrent_queue* ctx);
 void set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element);
 void set_slot_processed(struct concurrent_queue* ctx, struct queue_element* element);
 void set_slot_ready_and_wait(struct concurrent_queue* ctx, struct queue_element* element);
+void signal_process_start(struct concurrent_queue* ctx);
 
 struct concurrent_queue *nine_concurrent_queue_create(void);
 void nine_concurrent_queue_delete(struct concurrent_queue *ctx);
