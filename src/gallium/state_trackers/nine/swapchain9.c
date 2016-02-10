@@ -792,7 +792,8 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
             return S_PRESENT_OCCLUDED;
         }
     } else {
-        if (NineSwapChain9_GetOccluded(This)) {
+        if (NineSwapChain9_GetOccluded(This) ||
+            NineSwapChain9_ResolutionMismatch(This)) {
             This->base.device->device_needs_reset = TRUE;
         }
         if (This->base.device->device_needs_reset) {
@@ -1010,6 +1011,16 @@ NineSwapChain9_GetOccluded( struct NineSwapChain9 *This )
 {
     if (This->base.device->minor_version_num > 0) {
         return ID3DPresent_GetWindowOccluded(This->present);
+    }
+
+    return FALSE;
+}
+
+BOOL
+NineSwapChain9_ResolutionMismatch( struct NineSwapChain9 *This )
+{
+    if (This->base.device->minor_version_num > 1) {
+        return ID3DPresent_ResolutionMismatch(This->present);
     }
 
     return FALSE;
