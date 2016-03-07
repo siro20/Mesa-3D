@@ -1373,6 +1373,10 @@ static uint32_t si_translate_colorformat(enum pipe_format format)
 	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
 		return V_028C70_COLOR_INVALID;
 
+        /* hw cannot support mixed formats */
+	if (desc->is_mixed)
+		return V_028C70_COLOR_INVALID;
+
 	switch (desc->nr_channels) {
 	case 1:
 		switch (desc->channel[0].size) {
@@ -1650,6 +1654,10 @@ static uint32_t si_translate_texformat(struct pipe_screen *screen,
 	}
 
 	/* R8G8Bx_SNORM - TODO CxV8U8 */
+
+	/* hw cannot support mixed formats */
+	if (desc->is_mixed)
+		goto out_unknown;
 
 	/* See whether the components are of the same size. */
 	for (i = 1; i < desc->nr_channels; i++) {
