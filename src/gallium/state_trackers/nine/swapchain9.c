@@ -112,7 +112,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
                        D3DDISPLAYMODEEX *mode )
 {
     struct NineDevice9 *pDevice = This->base.device;
-    struct NineSurface9 **bufs;
     D3DSURFACE_DESC desc;
     HRESULT hr;
     struct pipe_resource *resource, tmplt;
@@ -126,7 +125,10 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     user_assert(pParams->SwapEffect, D3DERR_INVALIDCALL);
     user_assert((pParams->SwapEffect != D3DSWAPEFFECT_COPY) ||
                 (pParams->BackBufferCount <= 1), D3DERR_INVALIDCALL);
-    user_assert(pDevice->ex || pParams->BackBufferCount <= 3, D3DERR_INVALIDCALL);
+    user_assert(pDevice->ex || pParams->BackBufferCount <=
+                D3DPRESENT_BACK_BUFFERS_MAX, D3DERR_INVALIDCALL);
+    user_assert(!pDevice->ex || pParams->BackBufferCount <=
+                D3DPRESENT_BACK_BUFFERS_MAX_EX, D3DERR_INVALIDCALL);
     user_assert(pDevice->ex ||
                 (pParams->SwapEffect == D3DSWAPEFFECT_FLIP) ||
                 (pParams->SwapEffect == D3DSWAPEFFECT_COPY) ||
@@ -157,10 +159,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         nine_D3DPRESENTFLAG_to_str(pParams->Flags),
         pParams->FullScreen_RefreshRateInHz,
         pParams->PresentationInterval);
-
-    if (pParams->BackBufferCount > 3) {
-        pParams->BackBufferCount = 3;
-    }
 
     if (pParams->BackBufferCount == 0) {
         pParams->BackBufferCount = 1;
@@ -217,6 +215,37 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
         (This->actx->ref && This->actx->ref == This->screen))
         has_present_buffers = TRUE;
 
+    /* Clean old buffers */
+    if (This->pool) {
+        _mesa_threadpool_destroy(This, This->pool);
+        This->pool = NULL;
+    }
+    This->enable_threadpool = This->actx->thread_submit && (pParams->SwapEffect != D3DSWAPEFFECT_COPY);
+    if (This->enable_threadpool)
+        This->pool = _mesa_threadpool_create(This);
+    if (!This->pool)
+        This->enable_threadpool = FALSE;
+
+    memset(This->tasks, 0, sizeof(This->tasks));
+
+    for (i = 0; i < oldBufferCount; ++i) {
+        if (This->present_handles[i])
+            ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
+        This->present_handles[i] = NULL;
+        pipe_resource_reference(&(This->present_buffers[i]), NULL);
+        This->present_buffers[i] = NULL;
+    }
+    for (i = newBufferCount; i < oldBufferCount; ++i) {
+        if (This->buffers[i])
+            NineUnknown_Detach(NineUnknown(This->buffers[i]));
+        This->buffers[i] = NULL;
+    }
+    for (i = oldBufferCount; i < newBufferCount; ++i) {
+        This->buffers[i] = NULL;
+        This->present_handles[i] = NULL;
+        This->present_buffers[i] = NULL;
+    }
+
     /* Note: the buffer depth has to match the window depth.
      * In practice, ARGB buffers can be used with windows
      * of depth 24. Windows of depth 32 are extremely rare.
@@ -242,62 +271,6 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     desc.MultiSampleQuality = 0;
     desc.Width = pParams->BackBufferWidth;
     desc.Height = pParams->BackBufferHeight;
-
-    if (This->pool) {
-        _mesa_threadpool_destroy(This, This->pool);
-        This->pool = NULL;
-    }
-    This->enable_threadpool = This->actx->thread_submit && (pParams->SwapEffect != D3DSWAPEFFECT_COPY);
-    if (This->enable_threadpool)
-        This->pool = _mesa_threadpool_create(This);
-    if (!This->pool)
-        This->enable_threadpool = FALSE;
-
-    This->tasks = REALLOC(This->tasks,
-                          oldBufferCount * sizeof(struct threadpool_task *),
-                          newBufferCount * sizeof(struct threadpool_task *));
-    memset(This->tasks, 0, newBufferCount * sizeof(struct threadpool_task *));
-
-    for (i = 0; i < oldBufferCount; i++) {
-        ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
-        This->present_handles[i] = NULL;
-        if (This->present_buffers)
-            pipe_resource_reference(&(This->present_buffers[i]), NULL);
-    }
-
-    if (!has_present_buffers && This->present_buffers) {
-        FREE(This->present_buffers);
-        This->present_buffers = NULL;
-    }
-
-    if (newBufferCount != oldBufferCount) {
-        for (i = newBufferCount; i < oldBufferCount;
-             ++i)
-            NineUnknown_Detach(NineUnknown(This->buffers[i]));
-
-        bufs = REALLOC(This->buffers,
-                       oldBufferCount * sizeof(This->buffers[0]),
-                       newBufferCount * sizeof(This->buffers[0]));
-        if (!bufs)
-            return E_OUTOFMEMORY;
-        This->buffers = bufs;
-        This->present_handles = REALLOC(This->present_handles,
-                                        oldBufferCount * sizeof(D3DWindowBuffer *),
-                                        newBufferCount * sizeof(D3DWindowBuffer *));
-        for (i = oldBufferCount; i < newBufferCount; ++i) {
-            This->buffers[i] = NULL;
-            This->present_handles[i] = NULL;
-        }
-    }
-
-    if (has_present_buffers &&
-        (newBufferCount != oldBufferCount || !This->present_buffers)) {
-        This->present_buffers = REALLOC(This->present_buffers,
-                                        This->present_buffers == NULL ? 0 :
-                                        oldBufferCount * sizeof(struct pipe_resource *),
-                                        newBufferCount * sizeof(struct pipe_resource *));
-        memset(This->present_buffers, 0, newBufferCount * sizeof(struct pipe_resource *));
-    }
 
     for (i = 0; i < newBufferCount; ++i) {
         tmplt.bind = NINE_BIND_BACKBUFFER_FLAGS;
@@ -508,16 +481,17 @@ NineSwapChain9_dtor( struct NineSwapChain9 *This )
     if (This->pool)
         _mesa_threadpool_destroy(This, This->pool);
 
-    if (This->buffers) {
-        for (i = 0; i < This->params.BackBufferCount; i++) {
-            NineUnknown_Release(NineUnknown(This->buffers[i]));
+    /* Iterate over all buffers, as on error This->params.BackBufferCount
+     * isn't set and we don't have additional information about bound buffers. */
+    for (i = 0; i <= D3DPRESENT_BACK_BUFFERS_MAX_EX; i++) {
+        if (This->buffers[i])
+            NineUnknown_Detach(NineUnknown(This->buffers[i]));
+        if (This->present_handles[i])
             ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[i]);
-            if (This->present_buffers)
-                pipe_resource_reference(&(This->present_buffers[i]), NULL);
-        }
-        FREE(This->buffers);
-        FREE(This->present_buffers);
+        if (This->present_buffers[i])
+            pipe_resource_reference(&(This->present_buffers[i]), NULL);
     }
+
     if (This->zsbuf)
         NineUnknown_Destroy(NineUnknown(This->zsbuf));
 
