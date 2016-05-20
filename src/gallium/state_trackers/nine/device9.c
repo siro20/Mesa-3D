@@ -1864,11 +1864,18 @@ HRESULT NINE_WINAPI
 NineDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
                                     IDirect3DSurface9 *pNewZStencil )
 {
+    enum pipe_format format = PIPE_FORMAT_NONE;
     DBG("This=%p pNewZStencil=%p\n", This, pNewZStencil);
 
     if (This->state.ds != NineSurface9(pNewZStencil)) {
+        if (This->state.ds)
+            format = This->state.ds->base.info.format;
+
         nine_bind(&This->state.ds, pNewZStencil);
-        This->state.changed.group |= NINE_STATE_FB;
+        This->state.changed.group |= NINE_STATE_FB | NINE_STATE_RASTERIZER;
+
+        if (pNewZStencil && format != NineSurface9(pNewZStencil)->base.info.format)
+            This->state.changed.group |= NINE_STATE_RASTERIZER;
     }
     return D3D_OK;
 }

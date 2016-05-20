@@ -70,7 +70,8 @@ nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *dsa_state,
 }
 
 void
-nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DWORD *rs)
+nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state,
+		const DWORD *rs, enum pipe_format zs_format)
 {
     struct pipe_rasterizer_state rast;
 
@@ -125,9 +126,21 @@ nine_convert_rasterizer_state(struct pipe_rasterizer_state *rast_state, const DW
      * In practice on current and past hw it seems to be 2^-23
      * for all formats except float formats where it varies depending
      * on the content.
-     * For now use 1 << 23, but in the future perhaps add a way in gallium
-     * to get r for the format or get the gallium behaviour */
-    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (float)(1 << 23);
+     * For fixed point formats we can use the following mapping:
+     */
+
+	switch (zs_format) {
+	case PIPE_FORMAT_Z24X8_UNORM:
+	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+	    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (float)(1 << 23);
+		break;
+	case PIPE_FORMAT_Z16_UNORM:
+	    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (float)(1 << 14);
+		break;
+	default:
+	    rast.offset_units = asfloat(rs[D3DRS_DEPTHBIAS]) * (float)(1 << 24);
+	}
+
     rast.offset_scale = asfloat(rs[D3DRS_SLOPESCALEDEPTHBIAS]);
  /* rast.offset_clamp = 0.0f; */
 

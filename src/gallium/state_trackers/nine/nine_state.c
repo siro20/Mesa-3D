@@ -74,7 +74,10 @@ prepare_dsa(struct NineDevice9 *device)
 static inline void
 prepare_rasterizer(struct NineDevice9 *device)
 {
-    nine_convert_rasterizer_state(&device->state.pipe.rast, device->state.rs);
+	enum pipe_format zs_format;
+
+	zs_format = device->state.ds ? device->state.ds->base.info.format : PIPE_FORMAT_NONE;
+    nine_convert_rasterizer_state(&device->state.pipe.rast, device->state.rs, zs_format);
     device->state.commit |= NINE_STATE_COMMIT_RASTERIZER;
 }
 
