@@ -525,17 +525,30 @@ update_viewport(struct NineDevice9 *device)
 {
     const D3DVIEWPORT9 *vport = &device->state.viewport;
     struct pipe_viewport_state pvport;
+    struct NineSurface9 *rt0 = device->state.rt[0];
 
     /* D3D coordinates are:
      * -1 .. +1 for X,Y and
      *  0 .. +1 for Z (we use pipe_rasterizer_state.clip_halfz)
      */
-    pvport.scale[0] = (float)vport->Width * 0.5f;
-    pvport.scale[1] = (float)vport->Height * -0.5f;
-    pvport.scale[2] = vport->MaxZ - vport->MinZ;
-    pvport.translate[0] = (float)vport->Width * 0.5f + (float)vport->X;
-    pvport.translate[1] = (float)vport->Height * 0.5f + (float)vport->Y;
-    pvport.translate[2] = vport->MinZ;
+
+    if (rt0->base.info.width0 < vport->Width ||
+        rt0->base.info.height0 < vport->Height) {
+        /* use "default" dimensions */
+        pvport.scale[2] = 1.0f;
+        pvport.translate[2] = 0.0f;
+        pvport.translate[0] = (float)rt0->base.info.width0 * 0.5f;
+        pvport.translate[1] = (float)rt0->base.info.height0 * 0.5f;
+        pvport.scale[0] = (float)rt0->base.info.width0 * 0.5f;
+        pvport.scale[1] = (float)rt0->base.info.height0 * -0.5f;
+    } else {
+        pvport.scale[2] = vport->MaxZ - vport->MinZ;
+        pvport.translate[2] = vport->MinZ;
+        pvport.translate[0] = (float)vport->Width * 0.5f + (float)vport->X;
+        pvport.translate[1] = (float)vport->Height * 0.5f + (float)vport->Y;
+        pvport.scale[0] = (float)vport->Width * 0.5f;
+        pvport.scale[1] = (float)vport->Height * -0.5f;
+    }
 
     /* We found R600 and SI cards have some imprecision
      * on the barycentric coordinates used for interpolation.
