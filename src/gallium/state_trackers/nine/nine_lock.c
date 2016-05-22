@@ -2520,6 +2520,7 @@ LockPixelShader9_GetDevice( struct NinePixelShader9 *This,
 }
 #endif
 
+#if 0
 static HRESULT NINE_WINAPI
 LockPixelShader9_GetFunction( struct NinePixelShader9 *This,
                               void *pData,
@@ -2531,13 +2532,14 @@ LockPixelShader9_GetFunction( struct NinePixelShader9 *This,
     pipe_mutex_unlock(d3dlock_global);
     return r;
 }
+#endif
 
 IDirect3DPixelShader9Vtbl LockPixelShader9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice,
-    (void *)LockPixelShader9_GetFunction
+    (void *)NinePixelShader9_GetFunction
 };
 
 #if 0
@@ -3048,6 +3050,7 @@ LockVertexDeclaration9_GetDevice( struct NineVertexDeclaration9 *This,
 }
 #endif
 
+#if 0
 static HRESULT NINE_WINAPI
 LockVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
                                        D3DVERTEXELEMENT9 *pElement,
@@ -3059,13 +3062,14 @@ LockVertexDeclaration9_GetDeclaration( struct NineVertexDeclaration9 *This,
     pipe_mutex_unlock(d3dlock_global);
     return r;
 }
+#endif
 
 IDirect3DVertexDeclaration9Vtbl LockVertexDeclaration9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of VertexDecl9 iface */
-    (void *)LockVertexDeclaration9_GetDeclaration
+    (void *)NineVertexDeclaration9_GetDeclaration
 };
 
 #if 0
@@ -3081,6 +3085,7 @@ LockVertexShader9_GetDevice( struct NineVertexShader9 *This,
 }
 #endif
 
+#if 0
 static HRESULT NINE_WINAPI
 LockVertexShader9_GetFunction( struct NineVertexShader9 *This,
                                void *pData,
@@ -3092,13 +3097,14 @@ LockVertexShader9_GetFunction( struct NineVertexShader9 *This,
     pipe_mutex_unlock(d3dlock_global);
     return r;
 }
+#endif
 
 IDirect3DVertexShader9Vtbl LockVertexShader9_vtable = {
     (void *)NineUnknown_QueryInterface,
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice,
-    (void *)LockVertexShader9_GetFunction
+    (void *)NineVertexShader9_GetFunction
 };
 
 #if 0
