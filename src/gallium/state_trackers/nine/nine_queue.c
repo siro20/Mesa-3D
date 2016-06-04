@@ -174,13 +174,14 @@ queue_set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element
 {
     element->processed = NULL;
     p_atomic_inc(&ctx->queue_size);
-/*
+
     pipe_mutex_lock(ctx->mutex);
     pipe_condvar_signal(ctx->event);
     pipe_mutex_unlock(ctx->mutex);
-*/
 
     LEAVE_CRITICAL_SECTION();
+
+    pthread_yield();
 }
 
 void

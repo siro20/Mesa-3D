@@ -26,10 +26,12 @@
 #include "util/u_transfer.h"
 #include "util/u_inlines.h"
 #include "util/u_upload_mgr.h"
+#include "nine_pipe.h"
 
 #include "nine_queue.h"
 #include "nine_csmt.h"
 #include "nine_csmt_structs.h"
+#include "nine_csmt_helper.h"
 
 #include "authenticatedchannel9.h"
 #include "basetexture9.h"
@@ -68,6 +70,8 @@ struct csmt_context {
     struct u_upload_mgr *vertex_uploader;
     struct u_upload_mgr *index_uploader;
 };
+
+// Resource functions
 
 static HRESULT NINE_WINAPI
 PureResource9_SetPrivateData( struct NineResource9 *This,
@@ -128,397 +132,58 @@ PureResource9_GetPriority( struct NineResource9 *This )
     return r;
 }
 
-
-static void
-PureDevice9_EvictManagedResources_rx( struct NineDevice9 *This,
-                                      void *arg)
-{
-    HRESULT r;
-    (void) arg;
-
-    r = NineDevice9_EvictManagedResources(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_EvictManagedResources( struct NineDevice9 *This )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureDevice9_EvictManagedResources_rx;
-    slot->this = (void *)This;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_Reset_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    struct csmt_dword1_void1_result_args *args =
-            (struct csmt_dword1_void1_result_args *)arg;
-
-    *args->result = NineDevice9_Reset(This,
-            (D3DPRESENT_PARAMETERS *)args->obj1);
-
-    nine_csmt_reset(This);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_Reset( struct NineDevice9 *This,
-                   D3DPRESENT_PARAMETERS *pPresentationParameters )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct csmt_dword1_void1_result_args *args;
-    struct queue_element* slot;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_void1_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_Reset_rx;
-    slot->this = (void *)This;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_Present_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    struct csmt_dword3_void4_result_args *args =
-            (struct csmt_dword3_void4_result_args *)arg;
-
-    *args->result = NineDevice9_Present(This,
-            args->obj1,
-            args->obj2,
-            args->obj3,
-            args->obj4);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_Present( struct NineDevice9 *This,
-                     const RECT *pSourceRect,
-                     const RECT *pDestRect,
-                     HWND hDestWindowOverride,
-                     const RGNDATA *pDirtyRegion )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_Present_rx;
-    slot->this = (void *)This;
-
-    /* pass pointers as we are waiting for result */
-    args->obj1 = pSourceRect;
-    args->obj2 = pDestRect;
-    args->obj3 = hDestWindowOverride;
-    args->obj4 = pDirtyRegion;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    nine_bind(&ctx->rt[0], (IDirect3DSurface9 *)This->swapchains[0]->buffers[0]);
-
-    return r;
-}
-
-static void
-PureDevice9_UpdateSurface_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineDevice9_UpdateSurface(This,
-            (IDirect3DSurface9 *)args->obj1,
-            args->rect1,
-            (IDirect3DSurface9 *)args->obj2,
-            args->point1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-    nine_bind(&args->obj2, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_UpdateSurface( struct NineDevice9 *This,
-                           IDirect3DSurface9 *pSourceSurface,
-                           const RECT *pSourceRect,
-                           IDirect3DSurface9 *pDestinationSurface,
-                           const POINT *pDestPoint )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_UpdateSurface_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pSourceSurface);
-
-    args->obj2 = NULL;
-    nine_bind(&args->obj2, pDestinationSurface);
-
-    if (pDestPoint) {
-        args->point1 = &args->_point1;
-        args->_point1 = *pDestPoint;
-    } else {
-        args->point1 = NULL;
-    }
-
-    if (pSourceRect) {
-        args->rect1 = &args->_rect1;
-        args->_rect1 = *pSourceRect;
-    } else {
-        args->rect1 = NULL;
-    }
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_UpdateTexture_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineDevice9_UpdateTexture(This, args->obj1, args->obj2);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-    nine_bind(&args->obj2, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_UpdateTexture( struct NineDevice9 *This,
-                           IDirect3DBaseTexture9 *pSourceTexture,
-                           IDirect3DBaseTexture9 *pDestinationTexture )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_UpdateTexture_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pSourceTexture);
-
-    args->obj2 = NULL;
-    nine_bind(&args->obj2, pDestinationTexture);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_GetRenderTargetData_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineDevice9_GetRenderTargetData(This, args->obj1, args->obj2);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-    nine_bind(&args->obj2, NULL);
-}
-
-/* Available on PURE devices */
-static HRESULT NINE_WINAPI
-PureDevice9_GetRenderTargetData( struct NineDevice9 *This,
-                                 IDirect3DSurface9 *pRenderTarget,
-                                 IDirect3DSurface9 *pDestSurface )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_GetRenderTargetData_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pRenderTarget);
-
-    args->obj2 = NULL;
-    nine_bind(&args->obj2, pDestSurface);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_GetFrontBufferData_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_GetFrontBufferData(This, args->arg1, (IDirect3DSurface9 *)args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_GetFrontBufferData( struct NineDevice9 *This,
-                                UINT iSwapChain,
-                                IDirect3DSurface9 *pDestSurface )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_GetFrontBufferData_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = iSwapChain;
-    args->obj1 = (void *)pDestSurface;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_StretchRect_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineDevice9_StretchRect(This, args->obj1,
-            args->rect1,
-            args->obj2,
-            args->rect2,
-            args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-
-    nine_bind(&args->obj1, NULL);
-    nine_bind(&args->obj2, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_StretchRect( struct NineDevice9 *This,
-                         IDirect3DSurface9 *pSourceSurface,
-                         const RECT *pSourceRect,
-                         IDirect3DSurface9 *pDestSurface,
-                         const RECT *pDestRect,
-                         D3DTEXTUREFILTERTYPE Filter )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_StretchRect_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Filter;
-    if (pSourceRect) {
-        args->rect1 = &args->_rect1;
-        args->_rect1 = *pSourceRect;
-    } else {
-        args->rect1 = NULL;
-    }
-    if (pDestRect) {
-        args->rect2 = &args->_rect2;
-        args->_rect2 = *pDestRect;
-    } else {
-        args->rect2 = NULL;
-    }
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pSourceSurface);
-
-    args->obj2 = NULL;
-    nine_bind(&args->obj2, pDestSurface);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_ColorFill_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineDevice9_ColorFill(This, args->obj1,
-            args->rect1,
-            args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-
-    nine_bind(&args->obj1, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_ColorFill( struct NineDevice9 *This,
-                       IDirect3DSurface9 *pSurface,
-                       const RECT *pRect,
-                       D3DCOLOR color )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_ColorFill_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = color;
-    if (pRect) {
-        args->rect1 = &args->_rect1;
-        args->_rect1 = *pRect;
-    } else {
-        args->rect1 = NULL;
-    }
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pSurface);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
+// functions to serialize
+
+/* HOWTO
+ *
+ */
+CREATE_FUNC_NON_BLOCKING(Device9, EvictManagedResources,,,)
+
+CREATE_FUNC_BLOCKING(Device9, Reset,,nine_csmt_reset(This);, HRESULT, ARG_COPY_REF(D3DPRESENT_PARAMETERS, pPresentationParameters) )
+
+CREATE_FUNC_BLOCKING(Device9, Present,,,
+                     HRESULT,
+					 ARG_REF(const RECT, pSourceRect),
+					 ARG_REF(const RECT, pDestRect),
+					 ARG_VAL(HWND, hDestWindowOverride),
+					 ARG_REF(const RGNDATA, pDirtyRegion))
+
+CREATE_FUNC_NON_BLOCKING(Device9, UpdateSurface,,,
+						 ARG_BIND_REF(IDirect3DSurface9, pSourceSurface),
+						 ARG_COPY_REF(RECT, pSourceRect),
+						 ARG_BIND_REF(IDirect3DSurface9, pDestinationSurface),
+						 ARG_COPY_REF(POINT, pDestPoint))
+
+CREATE_FUNC_NON_BLOCKING(Device9, UpdateTexture,,,
+						 ARG_BIND_REF(IDirect3DBaseTexture9, pSourceTexture),
+						 ARG_BIND_REF(IDirect3DBaseTexture9, pDestinationTexture))
+
+CREATE_FUNC_NON_BLOCKING(Device9, GetRenderTargetData,,,
+						 ARG_BIND_REF(IDirect3DSurface9, pRenderTarget),
+						 ARG_BIND_REF(IDirect3DSurface9, pDestSurface))
+
+CREATE_FUNC_BLOCKING(Device9, GetFrontBufferData,,,
+					 HRESULT,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_REF(IDirect3DSurface9, pDestSurface))
+
+CREATE_FUNC_NON_BLOCKING(Device9, StretchRect,,,
+						 ARG_BIND_REF(IDirect3DSurface9, pSourceSurface),
+						 ARG_COPY_REF(RECT, pSourceRect),
+						 ARG_BIND_REF(IDirect3DSurface9, pDestSurface),
+						 ARG_COPY_REF(RECT, pDestRect),
+						 ARG_VAL(D3DTEXTUREFILTERTYPE, Filter))
+
+CREATE_FUNC_NON_BLOCKING(Device9, ColorFill,,,
+						 ARG_BIND_REF(IDirect3DSurface9, pSurface),
+						 ARG_COPY_REF(RECT, pRect),
+						 ARG_VAL(D3DCOLOR, color))
+
+CREATE_FUNC_NON_BLOCKING(Device9, SetRenderTarget,,,
+						 ARG_VAL(DWORD, RenderTargetIndex),
+						 ARG_BIND_REF(IDirect3DSurface9, pRenderTarget))
+
+#if 0
 static void
 PureDevice9_SetRenderTarget_rx( struct NineDevice9 *This,
                                void *arg )
@@ -564,8 +229,15 @@ PureDevice9_SetRenderTarget( struct NineDevice9 *This,
 
     return D3D_OK;
 }
+#endif
 
 /* Available on PURE devices */
+CREATE_FUNC_BLOCKING(Device9, GetRenderTarget,,,
+					 HRESULT,
+					 ARG_VAL(DWORD, RenderTargetIndex),
+					 ARG_REF(IDirect3DSurface9*, ppRenderTarget))
+
+#if 0
 static HRESULT NINE_WINAPI
 PureDevice9_GetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
@@ -585,6 +257,7 @@ PureDevice9_GetRenderTarget( struct NineDevice9 *This,
     NineUnknown_AddRef(NineUnknown(ctx->rt[RenderTargetIndex]));
     return D3D_OK;
 }
+#endif
 
 static void
 PureDevice9_SetDepthStencilSurface_rx( struct NineDevice9 *This,
@@ -646,343 +319,54 @@ PureDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-static void
-PureDevice9_BeginScene_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    (void) arg;
-
-    r = NineDevice9_BeginScene(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_BeginScene( struct NineDevice9 *This )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureDevice9_BeginScene_rx;
-    slot->this = (void *)This;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_EndScene_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    (void) arg;
-
-    r = NineDevice9_EndScene(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_EndScene( struct NineDevice9 *This )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureDevice9_EndScene_rx;
-    slot->this = (void *)This;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_Clear_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    struct csmt_dword4_float1_rect_args *args =
-            (struct csmt_dword4_float1_rect_args *)arg;
-
-    r = NineDevice9_Clear(This,
-            args->arg1,
-            args->rect1,
-            args->arg2,
-            args->arg3,
-            args->arg1_f,
-            args->arg4);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_Clear( struct NineDevice9 *This,
-                   DWORD Count,
-                   const D3DRECT *pRects,
-                   DWORD Flags,
-                   D3DCOLOR Color,
-                   float Z,
-                   DWORD Stencil )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword4_float1_rect_args *args;
-
-    user_assert(Count < 2 ,D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword4_float1_rect_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_Clear_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Count;
-    args->arg2 = Flags;
-    args->arg3 = Color;
-    args->arg4 = Stencil;
-    args->arg1_f = Z;
-    if (pRects) {
-        args->rect1 = &args->_rect;
-        args->_rect = *pRects;
-    } else {
-        args->rect1 = NULL;
-    }
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetTransform_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_matrix_args *args =
-            (struct csmt_dword_matrix_args *)arg;
-
-    r = NineDevice9_SetTransform(This, args->arg1, &args->mat1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetTransform( struct NineDevice9 *This,
-                          D3DTRANSFORMSTATETYPE State,
-                          const D3DMATRIX *pMatrix )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_matrix_args *args;
-
-    user_assert(pMatrix, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_matrix_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetTransform_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = State;
-    args->mat1 = *pMatrix;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_MultiplyTransform_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_matrix_args *args =
-            (struct csmt_dword_matrix_args *)arg;
-
-    r = NineDevice9_MultiplyTransform(This, args->arg1, &args->mat1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_MultiplyTransform( struct NineDevice9 *This,
-                               D3DTRANSFORMSTATETYPE State,
-                               const D3DMATRIX *pMatrix )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_matrix_args *args;
-
-    user_assert(pMatrix, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_matrix_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_MultiplyTransform_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = State;
-    args->mat1 = *pMatrix;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetViewport_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    D3DVIEWPORT9 *args =
-            (D3DVIEWPORT9 *)arg;
-
-    r = NineDevice9_SetViewport(This, args);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetViewport( struct NineDevice9 *This,
-                         const D3DVIEWPORT9 *pViewport )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    D3DVIEWPORT9 *args;
-
-    user_assert(pViewport, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(D3DVIEWPORT9), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetViewport_rx;
-    slot->this = (void *)This;
-
-    *args = *(D3DVIEWPORT9 *)pViewport;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetMaterial_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    D3DMATERIAL9 *args =
-            (D3DMATERIAL9 *)arg;
-
-    r = NineDevice9_SetMaterial(This, args);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetMaterial( struct NineDevice9 *This,
-                         const D3DMATERIAL9 *pMaterial )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    D3DMATERIAL9 *args;
-
-    user_assert(pMaterial, E_POINTER);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(D3DMATERIAL9), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetMaterial_rx;
-    slot->this = (void *)This;
-
-    *args = *(D3DMATERIAL9 *)pMaterial;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetLight_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_light_args *args =
-            (struct csmt_dword_light_args *)arg;
-
-    r = NineDevice9_SetLight(This, args->arg1, &args->light1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetLight( struct NineDevice9 *This,
-                      DWORD Index,
-                      const D3DLIGHT9 *pLight )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_light_args *args;
-
-    user_assert(pLight, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_light_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetLight_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Index;
-    args->light1 = *(D3DLIGHT9 *)pLight;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_LightEnable_rx( struct NineDevice9 *This,
-                            void *arg )
-{
-    HRESULT r;
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
-
-    r = NineDevice9_LightEnable(This, args->arg1, args->arg2);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_LightEnable( struct NineDevice9 *This,
-                         DWORD Index,
-                         BOOL Enable )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_LightEnable_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Index;
-    args->arg2 = Enable;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Device9, BeginScene,,,)
+
+CREATE_FUNC_NON_BLOCKING(Device9, EndScene,,,)
+
+CREATE_FUNC_NON_BLOCKING(Device9, Clear,,,
+						 ARG_VAL(DWORD, Count),
+						 ARG_COPY_REF(D3DRECT, pRects),
+						 ARG_VAL(DWORD, Flags),
+						 ARG_VAL(D3DCOLOR, Color),
+						 ARG_VAL(float, Z),
+						 ARG_VAL(DWORD, Stencil))
+
+CREATE_FUNC_NON_BLOCKING(Device9, SetTransform,,,
+						 ARG_VAL(D3DTRANSFORMSTATETYPE, State),
+						 ARG_COPY_REF(D3DMATRIX, pMatrix))
+
+CREATE_FUNC_NON_BLOCKING(Device9, MultiplyTransform,,,
+						 ARG_VAL(D3DTRANSFORMSTATETYPE, State),
+						 ARG_COPY_REF(D3DMATRIX, pMatrix))
+
+CREATE_FUNC_NON_BLOCKING(Device9, SetViewport,,,
+						 ARG_COPY_REF(D3DVIEWPORT9, pViewport))
+
+CREATE_FUNC_NON_BLOCKING(Device9, SetMaterial,,,
+						 ARG_COPY_REF(D3DMATERIAL9, pMaterial))
+
+CREATE_FUNC_NON_BLOCKING(Device9, SetLight,,,
+						 ARG_VAL(DWORD, Index),
+						 ARG_COPY_REF(D3DLIGHT9, pLight))
+
+CREATE_FUNC_NON_BLOCKING(Device9, LightEnable,,,
+						ARG_VAL(DWORD, Index),
+						ARG_VAL(BOOL, Enable))
+
+struct s_Device9_SetClipPlane_private {
+    DWORD Index;
+    float plane[4];
+};
 
 static void
 PureDevice9_SetClipPlane_rx( struct NineDevice9 *This,
                             void *arg )
 {
     HRESULT r;
-    struct csmt_dword_float4_args *args =
-            (struct csmt_dword_float4_args *)arg;
+    struct s_Device9_SetClipPlane_private *args =
+            (struct s_Device9_SetClipPlane_private *)arg;
 
-    r = NineDevice9_SetClipPlane(This, args->arg1_i, &args->arg1_f);
+    r = NineDevice9_SetClipPlane(This, args->Index, args->plane);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -994,298 +378,56 @@ PureDevice9_SetClipPlane( struct NineDevice9 *This,
 {
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
-    struct csmt_dword_float4_args *args;
+    struct s_Device9_SetClipPlane_private *args;
 
     user_assert(pPlane, D3DERR_INVALIDCALL);
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_float4_args), (void **)&args);
+    slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetClipPlane_private), (void **)&args);
     slot->data = args;
     slot->func = PureDevice9_SetClipPlane_rx;
     slot->this = (void *)This;
 
-    args->arg1_i = Index;
-    args->arg1_f = pPlane[0];
-    args->arg2_f = pPlane[1];
-    args->arg3_f = pPlane[2];
-    args->arg4_f = pPlane[3];
+    args->Index = Index;
+    memcpy(&args->plane, pPlane, sizeof(args->plane));
 
     queue_set_slot_ready(ctx->queue, slot);
 
     return D3D_OK;
 }
 
-static void
-PureDevice9_SetRenderState_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
+CREATE_FUNC_NON_BLOCKING(Device9, SetRenderState,,,
+						ARG_VAL(D3DRENDERSTATETYPE, State),
+						ARG_VAL(DWORD, Value))
 
-    r = NineDevice9_SetRenderState(This, args->arg1, args->arg2);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
+CREATE_FUNC_NON_BLOCKING(Device9, SetTexture,,,
+						ARG_VAL(DWORD, Stage),
+						ARG_BIND_REF(IDirect3DBaseTexture9, pTexture))
 
-static HRESULT NINE_WINAPI
-PureDevice9_SetRenderState( struct NineDevice9 *This,
-                            D3DRENDERSTATETYPE State,
-                            DWORD Value )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
+CREATE_FUNC_NON_BLOCKING(Device9, SetTextureStageState,,,
+						ARG_VAL(DWORD, Stage),
+						ARG_VAL(D3DTEXTURESTAGESTATETYPE, Type),
+						ARG_VAL(DWORD, Value))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetRenderState_rx;
-    slot->this = (void *)This;
+CREATE_FUNC_NON_BLOCKING(Device9, SetSamplerState,,,
+						ARG_VAL(DWORD, Sampler),
+						ARG_VAL(D3DTEXTURESTAGESTATETYPE, Type),
+						ARG_VAL(DWORD, Value))
 
-    args->arg1 = State;
-    args->arg2 = Value;
+CREATE_FUNC_NON_BLOCKING(Device9, SetScissorRect,,,
+						ARG_COPY_REF(RECT, pRect))
 
-    queue_set_slot_ready(ctx->queue, slot);
+CREATE_FUNC_NON_BLOCKING(Device9, DrawPrimitive,,,
+						ARG_VAL(D3DPRIMITIVETYPE, PrimitiveType),
+						ARG_VAL(UINT, StartVertex),
+						ARG_VAL(UINT, PrimitiveCount))
 
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetTexture_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_SetTexture(This, args->arg1, args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetTexture( struct NineDevice9 *This,
-                        DWORD Stage,
-                        IDirect3DBaseTexture9 *pTexture )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetTexture_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Stage;
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pTexture);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetTextureStageState_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    HRESULT r;
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
-
-    r = NineDevice9_SetTextureStageState(This, args->arg1, args->arg2, args->arg3);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetTextureStageState( struct NineDevice9 *This,
-                                  DWORD Stage,
-                                  D3DTEXTURESTAGESTATETYPE Type,
-                                  DWORD Value )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetTextureStageState_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Stage;
-    args->arg2 = Type;
-    args->arg3 = Value;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetSamplerState_rx( struct NineDevice9 *This,
-                             void *arg )
-{
-    HRESULT r;
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
-
-    r = NineDevice9_SetSamplerState(This, args->arg1, args->arg2, args->arg3);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetSamplerState( struct NineDevice9 *This,
-                             DWORD Sampler,
-                             D3DSAMPLERSTATETYPE Type,
-                             DWORD Value )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetSamplerState_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Sampler;
-    args->arg2 = Type;
-    args->arg3 = Value;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetScissorRect_rx( struct NineDevice9 *This,
-                              void *arg )
-{
-    HRESULT r;
-    struct csmt_dword4_float1_rect_args *args =
-            (struct csmt_dword4_float1_rect_args *)arg;
-
-    r = NineDevice9_SetScissorRect(This, (RECT *)args->rect1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetScissorRect( struct NineDevice9 *This,
-                            const RECT *pRect )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword4_float1_rect_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword4_float1_rect_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetScissorRect_rx;
-    slot->this = (void *)This;
-
-    if (pRect) {
-        args->rect1 = &args->_rect;
-        args->_rect = *(D3DRECT *)pRect;
-    } else {
-        args->rect1 = NULL;
-    }
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_DrawPrimitive_rx( struct NineDevice9 *This,
-                              void *arg )
-{
-    HRESULT r;
-    struct csmt_int1_uint5_args *args =
-            (struct csmt_int1_uint5_args *)arg;
-
-    r = NineDevice9_DrawPrimitive(This,
-                                args->arg1_u,
-                                args->arg2_u,
-                                args->arg3_u);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_DrawPrimitive( struct NineDevice9 *This,
-                           D3DPRIMITIVETYPE PrimitiveType,
-                           UINT StartVertex,
-                           UINT PrimitiveCount )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_int1_uint5_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_int1_uint5_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_DrawPrimitive_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = PrimitiveType;
-    args->arg2_u = StartVertex;
-    args->arg3_u = PrimitiveCount;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_DrawIndexedPrimitive_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    HRESULT r;
-    struct csmt_int1_uint5_args *args =
-            (struct csmt_int1_uint5_args *)arg;
-
-    r = NineDevice9_DrawIndexedPrimitive(This,
-                                            args->arg1_u,
-                                            args->arg1_i,
-                                            args->arg2_u,
-                                            args->arg3_u,
-                                            args->arg4_u,
-                                            args->arg5_u);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_DrawIndexedPrimitive( struct NineDevice9 *This,
-                                  D3DPRIMITIVETYPE PrimitiveType,
-                                  INT BaseVertexIndex,
-                                  UINT MinVertexIndex,
-                                  UINT NumVertices,
-                                  UINT startIndex,
-                                  UINT primCount )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_int1_uint5_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_int1_uint5_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_DrawIndexedPrimitive_rx;
-    slot->this = (void *)This;
-
-    args->arg1_i = BaseVertexIndex;
-    args->arg1_u = PrimitiveType;
-    args->arg2_u = MinVertexIndex;
-    args->arg3_u = NumVertices;
-    args->arg4_u = startIndex;
-    args->arg5_u = primCount;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Device9, DrawIndexedPrimitive,,,
+						ARG_VAL(D3DPRIMITIVETYPE, PrimitiveType),
+						ARG_VAL(INT, BaseVertexIndex),
+						ARG_VAL(UINT, MinVertexIndex),
+						ARG_VAL(UINT, NumVertices),
+						ARG_VAL(UINT, startIndex),
+						ARG_VAL(UINT, primCount))
 
 static void
 PureDevice9_DrawPrimitiveUP_rx( struct NineDevice9 *This,
@@ -1414,108 +556,14 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-static void
-PureDevice9_SetVertexDeclaration_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
+CREATE_FUNC_NON_BLOCKING(Device9, SetVertexDeclaration,,,
+						ARG_BIND_REF(IDirect3DVertexDeclaration9, pDecl))
 
-    r = NineDevice9_SetVertexDeclaration(This, args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
+CREATE_FUNC_NON_BLOCKING(Device9, SetFVF,,,
+						ARG_VAL(DWORD, FVF))
 
-static HRESULT NINE_WINAPI
-PureDevice9_SetVertexDeclaration( struct NineDevice9 *This,
-                                  IDirect3DVertexDeclaration9 *pDecl )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetVertexDeclaration_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pDecl);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetFVF_rx( struct NineDevice9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
-
-    r = NineDevice9_SetFVF(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetFVF( struct NineDevice9 *This,
-                    DWORD FVF )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetFVF_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = FVF;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetVertexShader_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_SetVertexShader(This, args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetVertexShader( struct NineDevice9 *This,
-                             IDirect3DVertexShader9 *pShader )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetVertexShader_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pShader);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Device9, SetVertexShader,,,
+						ARG_BIND_REF(IDirect3DVertexShader9, pDecl))
 
 static void
 PureDevice9_SetVertexShaderConstantF_rx( struct NineDevice9 *This,
@@ -1661,151 +709,21 @@ PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-static void
-PureDevice9_SetStreamSource_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_uint3_void_args *args =
-            (struct csmt_uint3_void_args *)arg;
+CREATE_FUNC_NON_BLOCKING(Device9, SetStreamSource,,,
+						ARG_VAL(UINT, StreamNumber),
+						ARG_BIND_REF(IDirect3DVertexBuffer9, pStreamData),
+						ARG_VAL(UINT, OffsetInBytes),
+						ARG_VAL(UINT, Stride))
 
-    r = NineDevice9_SetStreamSource(This, args->arg1, args->obj1, args->arg2, args->arg3);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
+CREATE_FUNC_NON_BLOCKING(Device9, SetStreamSourceFreq,,,
+						ARG_VAL(UINT, StreamNumber),
+						ARG_VAL(UINT, Setting))
 
-static HRESULT NINE_WINAPI
-PureDevice9_SetStreamSource( struct NineDevice9 *This,
-                             UINT StreamNumber,
-                             IDirect3DVertexBuffer9 *pStreamData,
-                             UINT OffsetInBytes,
-                             UINT Stride )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_uint3_void_args *args;
+CREATE_FUNC_NON_BLOCKING(Device9, SetIndices,,,
+						ARG_BIND_REF(IDirect3DIndexBuffer9, pIndexData))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint3_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetStreamSource_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = StreamNumber;
-    args->arg2 = OffsetInBytes;
-    args->arg3 = Stride;
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pStreamData);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetStreamSourceFreq_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_int1_uint5_args *args =
-            (struct csmt_int1_uint5_args *)arg;
-
-    r = NineDevice9_SetStreamSourceFreq(This, args->arg1_u, args->arg2_u);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
-                                 UINT StreamNumber,
-                                 UINT Setting )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_int1_uint5_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_int1_uint5_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetStreamSourceFreq_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = StreamNumber;
-    args->arg2_u = Setting;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetIndices_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_SetIndices(This, args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetIndices( struct NineDevice9 *This,
-        IDirect3DIndexBuffer9 *pIndexData )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetIndices_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pIndexData);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_SetPixelShader_rx( struct NineDevice9 *This,
-                               void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_SetPixelShader(This, args->obj1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&args->obj1, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_SetPixelShader( struct NineDevice9 *This,
-        IDirect3DPixelShader9 *pShader )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetPixelShader_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = NULL;
-    nine_bind(&args->obj1, pShader);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Device9, SetPixelShader,,,
+						ARG_BIND_REF(IDirect3DPixelShader9, pShader))
 
 static void
 PureDevice9_SetPixelShaderConstantF_rx( struct NineDevice9 *This,
@@ -1988,19 +906,11 @@ PureDevice9_GetDirect3D( struct NineDevice9 *This,
     return r;
 }
 
-static HRESULT NINE_WINAPI
-PureDevice9_GetDisplayMode( struct NineDevice9 *This,
-                            UINT iSwapChain,
-                            D3DDISPLAYMODE *pMode )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9_GetDisplayMode(This, iSwapChain, pMode);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+/* available on PURE devices */
+CREATE_FUNC_BLOCKING(Device9, GetDisplayMode,,,
+					 HRESULT,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_REF(D3DDISPLAYMODE, pMode))
 
 static HRESULT NINE_WINAPI
 PureDevice9_SetCursorProperties( struct NineDevice9 *This,
@@ -2085,109 +995,27 @@ PureDevice9_ShowCursor( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-static HRESULT NINE_WINAPI
-PureDevice9_CreateAdditionalSwapChain( struct NineDevice9 *This,
-                                       D3DPRESENT_PARAMETERS *pPresentationParameters,
-                                       IDirect3DSwapChain9 **pSwapChain )
-{
-    HRESULT r;
-    ERR("called\n");
+CREATE_FUNC_BLOCKING(Device9, CreateAdditionalSwapChain,,,
+					 HRESULT,
+					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters),
+					 ARG_REF(IDirect3DSwapChain9*, pSwapChain))
 
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9_CreateAdditionalSwapChain(This, pPresentationParameters, pSwapChain);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING(Device9, GetSwapChain,,,
+					 HRESULT,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_REF(IDirect3DSwapChain9*, pSwapChain))
 
-static void
-PureDevice9_GetSwapChain_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_GetSwapChain(This,
-            args->arg1_u,
-            (IDirect3DSwapChain9 **)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_GetSwapChain( struct NineDevice9 *This,
-                          UINT iSwapChain,
-                          IDirect3DSwapChain9 **pSwapChain )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_GetSwapChain_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pSwapChain;
-    args->arg1_u = iSwapChain;
-
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static UINT NINE_WINAPI
-PureDevice9_GetNumberOfSwapChains( struct NineDevice9 *This )
-{
-    UINT r;
-    ERR("called\n");
-
-    r = NineDevice9_GetNumberOfSwapChains(This);
-    return r;
-}
-
-static void
-PureDevice9_GetBackBuffer_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_GetBackBuffer(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg1,
-            (IDirect3DSurface9 **)args->obj1);
-}
+CREATE_FUNC_BLOCKING(Device9, GetNumberOfSwapChains,,,
+					 UINT)
 
 /* Available on PURE devices */
-static HRESULT NINE_WINAPI
-PureDevice9_GetBackBuffer( struct NineDevice9 *This,
-                           UINT iSwapChain,
-                           UINT iBackBuffer,
-                           D3DBACKBUFFER_TYPE Type,
-                           IDirect3DSurface9 **ppBackBuffer )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
+CREATE_FUNC_BLOCKING(Device9, GetBackBuffer,,,
+					 HRESULT,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_VAL(UINT, iBackBuffer),
+					 ARG_VAL(D3DBACKBUFFER_TYPE, Type),
+					 ARG_REF(IDirect3DSurface9*, ppBackBuffer))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_GetBackBuffer_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)ppBackBuffer;
-    args->arg1 = Type;
-    args->arg1_u = iSwapChain;
-    args->arg2_u = iBackBuffer;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
 
 static HRESULT NINE_WINAPI
 PureDevice9_GetRasterStatus( struct NineDevice9 *This,
@@ -2229,710 +1057,131 @@ PureDevice9_GetGammaRamp( struct NineDevice9 *This,
     ERR("called, but PURE device requested.\n");
 }
 
-static void
-PureDevice9_CreateTexture_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateTexture(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg3_u,
-            args->arg1,
-            args->arg2,
-            args->arg4_u,
-            (IDirect3DTexture9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateTexture( struct NineDevice9 *This,
-                           UINT Width,
-                           UINT Height,
-                           UINT Levels,
-                           DWORD Usage,
-                           D3DFORMAT Format,
-                           D3DPOOL Pool,
-                           IDirect3DTexture9 **ppTexture,
-                           HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppTexture, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateTexture_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Width;
-    args->arg2_u = Height;
-    args->arg3_u = Levels;
-    args->arg4_u = Pool;
-
-    args->arg1 = Usage;
-    args->arg2 = Format;
-    args->obj1 = (void *)ppTexture;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateVolumeTexture_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateVolumeTexture(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg3_u,
-            args->arg4_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            (IDirect3DVolumeTexture9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateVolumeTexture( struct NineDevice9 *This,
-                                 UINT Width,
-                                 UINT Height,
-                                 UINT Depth,
-                                 UINT Levels,
-                                 DWORD Usage,
-                                 D3DFORMAT Format,
-                                 D3DPOOL Pool,
-                                 IDirect3DVolumeTexture9 **ppVolumeTexture,
-                                 HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppVolumeTexture, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateVolumeTexture_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Width;
-    args->arg2_u = Height;
-    args->arg3_u = Depth;
-    args->arg4_u = Levels;
-
-    args->arg1 = Usage;
-    args->arg2 = Format;
-    args->arg3 = Pool;
-
-    args->obj1 = (void *)ppVolumeTexture;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateCubeTexture_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateCubeTexture(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            (IDirect3DCubeTexture9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateCubeTexture( struct NineDevice9 *This,
-                               UINT EdgeLength,
-                               UINT Levels,
-                               DWORD Usage,
-                               D3DFORMAT Format,
-                               D3DPOOL Pool,
-                               IDirect3DCubeTexture9 **ppCubeTexture,
-                               HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppCubeTexture, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateCubeTexture_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = EdgeLength;
-    args->arg2_u = Levels;
-
-    args->arg1 = Usage;
-    args->arg2 = Format;
-    args->arg3 = Pool;
-
-    args->obj1 = (void *)ppCubeTexture;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateVertexBuffer_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateVertexBuffer(This,
-            args->arg1_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            (IDirect3DVertexBuffer9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateVertexBuffer( struct NineDevice9 *This,
-                                UINT Length,
-                                DWORD Usage,
-                                DWORD FVF,
-                                D3DPOOL Pool,
-                                IDirect3DVertexBuffer9 **ppVertexBuffer,
-                                HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppVertexBuffer, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateVertexBuffer_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Length;
-
-    args->arg1 = Usage;
-    args->arg2 = FVF;
-    args->arg3 = Pool;
-
-    args->obj1 = (void *)ppVertexBuffer;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateIndexBuffer_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateIndexBuffer(This,
-            args->arg1_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            (IDirect3DIndexBuffer9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateIndexBuffer( struct NineDevice9 *This,
-                               UINT Length,
-                               DWORD Usage,
-                               D3DFORMAT Format,
-                               D3DPOOL Pool,
-                               IDirect3DIndexBuffer9 **ppIndexBuffer,
-                               HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppIndexBuffer, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateIndexBuffer_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Length;
-
-    args->arg1 = Usage;
-    args->arg2 = Format;
-    args->arg3 = Pool;
-
-    args->obj1 = (void *)ppIndexBuffer;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateRenderTarget_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateRenderTarget(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            args->arg3_u,
-            (IDirect3DSurface9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateRenderTarget( struct NineDevice9 *This,
-                                UINT Width,
-                                UINT Height,
-                                D3DFORMAT Format,
-                                D3DMULTISAMPLE_TYPE MultiSample,
-                                DWORD MultisampleQuality,
-                                BOOL Pureable,
-                                IDirect3DSurface9 **ppSurface,
-                                HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppSurface, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateRenderTarget_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Width;
-    args->arg2_u = Height;
-    args->arg3_u = Pureable;
-
-    args->arg1 = Format;
-    args->arg2 = MultiSample;
-    args->arg3 = MultisampleQuality;
-
-    args->obj1 = (void *)ppSurface;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateDepthStencilSurface_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateDepthStencilSurface(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg1,
-            args->arg2,
-            args->arg3,
-            args->arg3_u,
-            (IDirect3DSurface9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateDepthStencilSurface( struct NineDevice9 *This,
-                                       UINT Width,
-                                       UINT Height,
-                                       D3DFORMAT Format,
-                                       D3DMULTISAMPLE_TYPE MultiSample,
-                                       DWORD MultisampleQuality,
-                                       BOOL Discard,
-                                       IDirect3DSurface9 **ppSurface,
-                                       HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppSurface, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateDepthStencilSurface_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Width;
-    args->arg2_u = Height;
-    args->arg3_u = Discard;
-
-    args->arg1 = Format;
-    args->arg2 = MultiSample;
-    args->arg3 = MultisampleQuality;
-
-    args->obj1 = (void *)ppSurface;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateOffscreenPlainSurface_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateOffscreenPlainSurface(This,
-            args->arg1_u,
-            args->arg2_u,
-            args->arg1,
-            args->arg2,
-            (IDirect3DSurface9 **)args->obj1,
-            args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateOffscreenPlainSurface( struct NineDevice9 *This,
-                                         UINT Width,
-                                         UINT Height,
-                                         D3DFORMAT Format,
-                                         D3DPOOL Pool,
-                                         IDirect3DSurface9 **ppSurface,
-                                         HANDLE *pSharedHandle )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppSurface, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateOffscreenPlainSurface_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Width;
-    args->arg2_u = Height;
-
-    args->arg1 = Format;
-    args->arg2 = Pool;
-
-    args->obj1 = (void *)ppSurface;
-    args->obj2 = pSharedHandle;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateStateBlock_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateStateBlock(This,
-            args->arg1,
-            (IDirect3DStateBlock9 **)args->obj1);
-}
+//     user_assert(ppTexture, D3DERR_INVALIDCALL);
+
+CREATE_FUNC_BLOCKING(Device9, CreateTexture,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Width),
+					 ARG_VAL(UINT, Height),
+					 ARG_VAL(UINT, Levels),
+					 ARG_VAL(DWORD, Usage),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DTexture9*, ppTexture),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+//     user_assert(ppVolumeTexture, D3DERR_INVALIDCALL);
+
+CREATE_FUNC_BLOCKING(Device9, CreateVolumeTexture,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Width),
+					 ARG_VAL(UINT, Height),
+					 ARG_VAL(UINT, Depth),
+					 ARG_VAL(UINT, Levels),
+					 ARG_VAL(DWORD, Usage),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DVolumeTexture9*, ppVolumeTexture),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+//    user_assert(ppCubeTexture, D3DERR_INVALIDCALL);
+
+CREATE_FUNC_BLOCKING(Device9, CreateCubeTexture,,,
+					 HRESULT,
+					 ARG_VAL(UINT, EdgeLength),
+					 ARG_VAL(UINT, Levels),
+					 ARG_VAL(DWORD, Usage),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DCubeTexture9*, ppCubeTexture),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+ // user_assert(ppVertexBuffer, D3DERR_INVALIDCALL);
+
+CREATE_FUNC_BLOCKING(Device9, CreateVertexBuffer,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Length),
+					 ARG_VAL(DWORD, Usage),
+					 ARG_VAL(DWORD, FVF),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DVertexBuffer9*, ppIndexBuffer),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+
+//    user_assert(ppIndexBuffer, D3DERR_INVALIDCALL);
+
+CREATE_FUNC_BLOCKING(Device9, CreateIndexBuffer,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Length),
+					 ARG_VAL(DWORD, Usage),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DIndexBuffer9*, ppIndexBuffer),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+
+CREATE_FUNC_BLOCKING(Device9, CreateRenderTarget,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Width),
+					 ARG_VAL(UINT, Height),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DMULTISAMPLE_TYPE, MultiSample),
+					 ARG_VAL(DWORD, MultisampleQuality),
+					 ARG_VAL(BOOL, Pureable),
+					 ARG_REF(IDirect3DSurface9*, ppSurface),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+CREATE_FUNC_BLOCKING(Device9, CreateDepthStencilSurface,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Width),
+					 ARG_VAL(UINT, Height),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DMULTISAMPLE_TYPE, MultiSample),
+					 ARG_VAL(DWORD, MultisampleQuality),
+					 ARG_VAL(BOOL, Discard),
+					 ARG_REF(IDirect3DSurface9*, ppSurface),
+					 ARG_REF(HANDLE, pSharedHandle))
+
+CREATE_FUNC_BLOCKING(Device9, CreateOffscreenPlainSurface,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Width),
+					 ARG_VAL(UINT, Height),
+					 ARG_VAL(D3DFORMAT, Format),
+					 ARG_VAL(D3DPOOL, Pool),
+					 ARG_REF(IDirect3DSurface9*, ppSurface),
+					 ARG_REF(HANDLE, pSharedHandle))
 
 /* allowed on PURE devices */
-static HRESULT NINE_WINAPI
-PureDevice9_CreateStateBlock( struct NineDevice9 *This,
-                              D3DSTATEBLOCKTYPE Type,
-                              IDirect3DStateBlock9 **ppSB )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
+CREATE_FUNC_BLOCKING(Device9, CreateStateBlock,,,
+					 HRESULT,
+					 ARG_VAL(D3DSTATEBLOCKTYPE, Type),
+					 ARG_REF(IDirect3DStateBlock9*, ppSB))
 
-    user_assert(ppSB, D3DERR_INVALIDCALL);
+CREATE_FUNC_BLOCKING(Device9, CreateVertexDeclaration,,,
+					 HRESULT,
+					 ARG_REF(const D3DVERTEXELEMENT9, pVertexElements),
+					 ARG_REF(IDirect3DVertexDeclaration9*, ppDecl))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateStateBlock_rx;
-    slot->this = (void *)This;
+CREATE_FUNC_BLOCKING(Device9, CreateVertexShader,,,
+					 HRESULT,
+					 ARG_REF(const DWORD, pFunction),
+					 ARG_REF(IDirect3DVertexShader9*, ppShader))
 
-    args->arg1 = Type;
+CREATE_FUNC_BLOCKING(Device9, CreatePixelShader,,,
+					 HRESULT,
+					 ARG_REF(const DWORD, pFunction),
+					 ARG_REF(IDirect3DPixelShader9*, ppShader))
 
-    args->obj1 = (void *)ppSB;
-    args->result = &r;
+CREATE_FUNC_BLOCKING(Device9, CreateQuery,,,
+					 HRESULT,
+					 ARG_VAL(D3DQUERYTYPE, Type),
+					 ARG_REF(IDirect3DQuery9*, ppQuery))
 
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
+CREATE_FUNC_NON_BLOCKING(Device9, BeginStateBlock,,,)
 
-    return r;
-}
-
-static void
-PureDevice9_CreateVertexDeclaration_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateVertexDeclaration(This,
-            (const D3DVERTEXELEMENT9 *)args->obj1,
-            (IDirect3DVertexDeclaration9 **)args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateVertexDeclaration( struct NineDevice9 *This,
-                                     const D3DVERTEXELEMENT9 *pVertexElements,
-                                     IDirect3DVertexDeclaration9 **ppDecl )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(pVertexElements, D3DERR_INVALIDCALL);
-    user_assert(ppDecl, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateVertexDeclaration_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pVertexElements;
-    args->obj2 = (void *)ppDecl;
-
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateVertexShader_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateVertexShader(This,
-            (const DWORD *)args->obj1,
-            (IDirect3DVertexShader9 **)args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateVertexShader( struct NineDevice9 *This,
-                                const DWORD *pFunction,
-                                IDirect3DVertexShader9 **ppShader )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(pFunction, D3DERR_INVALIDCALL);
-    user_assert(ppShader, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateVertexShader_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pFunction;
-    args->obj2 = (void *)ppShader;
-
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreatePixelShader_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreatePixelShader(This,
-            (const DWORD *)args->obj1,
-            (IDirect3DPixelShader9 **)args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreatePixelShader( struct NineDevice9 *This,
-                               const DWORD *pFunction,
-                               IDirect3DPixelShader9 **ppShader )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(pFunction, D3DERR_INVALIDCALL);
-    user_assert(ppShader, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreatePixelShader_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pFunction;
-    args->obj2 = (void *)ppShader;
-
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_CreateQuery_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9_CreateQuery(This,
-            args->arg1,
-            (IDirect3DQuery9 **)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_CreateQuery( struct NineDevice9 *This,
-                         D3DQUERYTYPE Type,
-                         IDirect3DQuery9 **ppQuery )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    user_assert(ppQuery, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_CreateQuery_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)ppQuery;
-    args->arg1 = Type;
-
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureDevice9_BeginStateBlock_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    (void) arg;
-
-    NineDevice9_BeginStateBlock(This);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_BeginStateBlock( struct NineDevice9 *This )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureDevice9_BeginStateBlock_rx;
-    slot->this = (void *)This;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureDevice9_EndStateBlock_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_EndStateBlock(This,
-            (IDirect3DStateBlock9 **)args->obj1);
-    if (r != D3D_OK)
-        ERR("failed with %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_EndStateBlock( struct NineDevice9 *This,
-                           IDirect3DStateBlock9 **ppSB )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    user_assert(ppSB, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_EndStateBlock_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)ppSB;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return *ppSB ? D3D_OK : D3DERR_INVALIDCALL;
-}
+CREATE_FUNC_BLOCKING(Device9, EndStateBlock,,,
+		HRESULT,
+		ARG_REF(IDirect3DStateBlock9 *,ppSB))
 
 static HRESULT NINE_WINAPI
 PureDevice9_GetTransform( struct NineDevice9 *This,
@@ -3040,41 +1289,9 @@ PureDevice9_GetSamplerState( struct NineDevice9 *This,
     return D3DERR_INVALIDCALL;
 }
 
-static void
-PureDevice9_ValidateDevice_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_ValidateDevice(This,
-            (DWORD *)args->obj1);
-    if (r != D3D_OK)
-        ERR("failed with %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9_ValidateDevice( struct NineDevice9 *This,
-                            DWORD *pNumPasses )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    user_assert(pNumPasses, D3DERR_INVALIDCALL);
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_ValidateDevice_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pNumPasses;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_BLOCKING(Device9, ValidateDevice,,,
+					HRESULT,
+					ARG_REF(DWORD, pNumPasses))
 
 static HRESULT NINE_WINAPI
 PureDevice9_SetPaletteEntries( struct NineDevice9 *This,
@@ -3440,50 +1657,17 @@ PureDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-static void
-PureDevice9Ex_PresentEx_rx( struct NineDevice9Ex *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void4_result_args *args =
-            (struct csmt_dword3_void4_result_args *)arg;
+CREATE_FUNC_BLOCKING(Device9Ex, PresentEx,,,
+					HRESULT,
+					ARG_REF(RECT, pSourceRect),
+					ARG_REF(RECT, pDestRect),
+					ARG_VAL(HWND, hDestWindowOverride),
+					ARG_REF(RGNDATA, pDirtyRegion),
+					ARG_VAL(DWORD, dwFlags))
 
-    *args->result = NineDevice9Ex_PresentEx(This,
-            (const RECT *)args->obj1,
-            (const RECT *)args->obj2,
-            (HWND)args->obj3,
-            (const RGNDATA *)args->obj4,
-            args->arg1);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_PresentEx( struct NineDevice9Ex *This,
-                         const RECT *pSourceRect,
-                         const RECT *pDestRect,
-                         HWND hDestWindowOverride,
-                         const RGNDATA *pDirtyRegion,
-                         DWORD dwFlags )
-{
-    struct csmt_context *ctx = This->base.csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9Ex_PresentEx_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pSourceRect;
-    args->obj2 = (void *)pDestRect;
-    args->obj3 = (void *)hDestWindowOverride;
-    args->obj4 = (void *)pDirtyRegion;
-    args->arg1 = dwFlags;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
+CREATE_FUNC_BLOCKING(Device9Ex, CheckDeviceState,,,
+					HRESULT,
+					ARG_VAL(HWND, hDestinationWindow))
 
 static HRESULT NINE_WINAPI
 PureDevice9Ex_GetGPUThreadPriority( struct NineDevice9Ex *This,
@@ -3528,150 +1712,50 @@ PureDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-static void
-PureDevice9Ex_CheckDeviceState_rx( struct NineDevice9Ex *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(Device9Ex, CreateRenderTargetEx,,,
+					HRESULT,
+					ARG_VAL(UINT, Width),
+					ARG_VAL(UINT, Height),
+					ARG_VAL(D3DFORMAT, Format),
+					ARG_VAL(D3DMULTISAMPLE_TYPE, MultiSample),
+					ARG_VAL(DWORD, MultisampleQuality),
+					ARG_VAL(BOOL, Pureable),
+					ARG_REF(IDirect3DSurface9*, ppSurface),
+					ARG_REF(HANDLE, pSharedHandle),
+					ARG_VAL(DWORD, Usage))
 
-    *args->result = NineDevice9Ex_CheckDeviceState(This,
-                                                   args->obj1);
-}
+CREATE_FUNC_BLOCKING(Device9Ex, CreateOffscreenPlainSurfaceEx,,,
+					HRESULT,
+					ARG_VAL(UINT, Width),
+					ARG_VAL(UINT, Height),
+					ARG_VAL(D3DFORMAT, Format),
+					ARG_VAL(D3DPOOL, Pool),
+					ARG_REF(IDirect3DSurface9*, ppSurface),
+					ARG_REF(HANDLE, pSharedHandle),
+					ARG_VAL(DWORD, Usage))
 
-static HRESULT NINE_WINAPI
-PureDevice9Ex_CheckDeviceState( struct NineDevice9Ex *This,
-                                HWND hDestinationWindow )
-{
-    struct csmt_context *ctx = This->base.csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
+CREATE_FUNC_BLOCKING(Device9Ex, CreateDepthStencilSurfaceEx,,,
+					HRESULT,
+					ARG_VAL(UINT, Width),
+					ARG_VAL(UINT, Height),
+					ARG_VAL(D3DFORMAT, Format),
+					ARG_VAL(D3DMULTISAMPLE_TYPE, MultiSample),
+					ARG_VAL(DWORD, MultisampleQuality),
+					ARG_VAL(BOOL, Discard),
+					ARG_REF(IDirect3DSurface9*, ppSurface),
+					ARG_REF(HANDLE, pSharedHandle),
+					ARG_VAL(DWORD, Usage))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9Ex_CheckDeviceState_rx;
-    slot->this = (void *)This;
+CREATE_FUNC_BLOCKING(Device9Ex, ResetEx,,,
+					HRESULT,
+					ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters),
+					ARG_REF(D3DDISPLAYMODEEX, pFullscreenDisplayMode))
 
-    args->obj1 = hDestinationWindow;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_CreateRenderTargetEx( struct NineDevice9Ex *This,
-                                    UINT Width,
-                                    UINT Height,
-                                    D3DFORMAT Format,
-                                    D3DMULTISAMPLE_TYPE MultiSample,
-                                    DWORD MultisampleQuality,
-                                    BOOL Pureable,
-                                    IDirect3DSurface9 **ppSurface,
-                                    HANDLE *pSharedHandle,
-                                    DWORD Usage )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9Ex_CreateRenderTargetEx(This, Width, Height, Format, MultiSample, MultisampleQuality, Pureable, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_CreateOffscreenPlainSurfaceEx( struct NineDevice9Ex *This,
-                                             UINT Width,
-                                             UINT Height,
-                                             D3DFORMAT Format,
-                                             D3DPOOL Pool,
-                                             IDirect3DSurface9 **ppSurface,
-                                             HANDLE *pSharedHandle,
-                                             DWORD Usage )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9Ex_CreateOffscreenPlainSurfaceEx(This, Width, Height, Format, Pool, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_CreateDepthStencilSurfaceEx( struct NineDevice9Ex *This,
-                                           UINT Width,
-                                           UINT Height,
-                                           D3DFORMAT Format,
-                                           D3DMULTISAMPLE_TYPE MultiSample,
-                                           DWORD MultisampleQuality,
-                                           BOOL Discard,
-                                           IDirect3DSurface9 **ppSurface,
-                                           HANDLE *pSharedHandle,
-                                           DWORD Usage )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9Ex_CreateDepthStencilSurfaceEx(This, Width, Height, Format, MultiSample, MultisampleQuality, Discard, ppSurface, pSharedHandle, Usage);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
-
-static void
-PureDevice9Ex_ResetEx_rx( struct NineDevice9Ex *This,
-                                     void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineDevice9Ex_ResetEx(This,
-            (D3DPRESENT_PARAMETERS *)args->obj1,
-            (D3DDISPLAYMODEEX *)args->obj2);
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_ResetEx( struct NineDevice9Ex *This,
-                       D3DPRESENT_PARAMETERS *pPresentationParameters,
-                       D3DDISPLAYMODEEX *pFullscreenDisplayMode )
-{
-    struct csmt_context *ctx = This->base.csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9Ex_ResetEx_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pPresentationParameters;
-    args->obj2 = (void *)pFullscreenDisplayMode;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static HRESULT NINE_WINAPI
-PureDevice9Ex_GetDisplayModeEx( struct NineDevice9Ex *This,
-                                UINT iSwapChain,
-                                D3DDISPLAYMODEEX *pMode,
-                                D3DDISPLAYROTATION *pRotation )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9Ex_GetDisplayModeEx(This, iSwapChain, pMode, pRotation);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING(Device9Ex, GetDisplayModeEx,,,
+					HRESULT,
+					ARG_VAL(UINT, iSwapChain),
+					ARG_REF(D3DDISPLAYMODEEX, pMode),
+					ARG_REF(D3DDISPLAYROTATION, pRotation))
 
 IDirect3DDevice9ExVtbl PureDevice9Ex_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -3810,109 +1894,18 @@ IDirect3DDevice9ExVtbl PureDevice9Ex_vtable = {
     (void *)PureDevice9Ex_GetDisplayModeEx
 };
 
-static void
-PureSurface9_GetContainer_rx( struct NineSurface9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(Surface9, GetContainer,,,
+					HRESULT,
+						ARG_VAL(REFIID, riid),
+						ARG_REF(void *, ppContainer))
 
-    *args->result = NineSurface9_GetContainer(This,
-            (REFIID)args->obj2,
-            (void **)args->obj3);
-}
+CREATE_FUNC_BLOCKING(Surface9, LockRect,,,
+					HRESULT,
+						ARG_REF(D3DLOCKED_RECT, pPureedRect),
+						ARG_REF(RECT, pRect),
+						ARG_VAL(DWORD, Flags))
 
-static HRESULT NINE_WINAPI
-PureSurface9_GetContainer( struct NineSurface9 *This,
-                           REFIID riid,
-                           void **ppContainer )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSurface9_GetContainer_rx;
-    slot->this = (void *)This;
-
-    args->obj2 = (void *)riid;
-    args->obj3 = (void *)ppContainer;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSurface9_LockRect_rx( struct NineSurface9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineSurface9_LockRect(This,
-            (D3DLOCKED_RECT *)args->obj2,
-            (const RECT *)args->obj3,
-            args->arg1);
-}
-
-static HRESULT NINE_WINAPI
-PureSurface9_LockRect( struct NineSurface9 *This,
-                       D3DLOCKED_RECT *pPureedRect,
-                       const RECT *pRect,
-                       DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSurface9_LockRect_rx;
-    slot->this = (void *)This;
-
-    args->obj2 = (void *)pPureedRect;
-    args->obj3 = (void *)pRect;
-    args->arg1 = Flags;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSurface9_UnlockRect_rx( struct NineSurface9 *This,
-                       void *arg )
-{
-    HRESULT r;
-
-    r = NineSurface9_UnlockRect(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureSurface9_UnlockRect( struct NineSurface9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureSurface9_UnlockRect_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Surface9, UnlockRect,,,)
 
 static HRESULT NINE_WINAPI
 PureSurface9_GetDC( struct NineSurface9 *This,
@@ -4001,130 +1994,19 @@ IDirect3DAuthenticatedChannel9Vtbl PureAuthenticatedChannel9_vtable = {
     (void *)PureAuthenticatedChannel9_Configure
 };
 
-static void
-PureBaseTexture9_SetLOD_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-    // XXX
-    *(DWORD *)args->obj1 = NineBaseTexture9_SetLOD(This, args->arg1);
-}
+CREATE_FUNC_BLOCKING(BaseTexture9, SetLOD,,,
+					 DWORD,
+					 ARG_VAL(DWORD, LODNew))
 
-static DWORD NINE_WINAPI
-PureBaseTexture9_SetLOD( struct NineBaseTexture9 *This,
-                         DWORD LODNew )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-    DWORD r;
+CREATE_FUNC_BLOCKING(BaseTexture9, GetLOD,,,
+					 DWORD)
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureBaseTexture9_SetLOD_rx;
-    slot->this = (void *)This;
+CREATE_FUNC_NON_BLOCKING(BaseTexture9, SetAutoGenFilterType,,,
+						 ARG_VAL(D3DTEXTUREFILTERTYPE, FilterType))
 
-    args->arg1 = LODNew;
-    args->obj1 = &r;
 
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureBaseTexture9_GetLOD_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-    // XXX
-    *(DWORD *)args->obj1 = NineBaseTexture9_GetLOD(This);
-}
-
-static DWORD NINE_WINAPI
-PureBaseTexture9_GetLOD( struct NineBaseTexture9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-    DWORD r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureBaseTexture9_GetLOD_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = &r;
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureBaseTexture9_SetAutoGenFilterType_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineBaseTexture9_SetAutoGenFilterType(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static HRESULT NINE_WINAPI
-PureBaseTexture9_SetAutoGenFilterType( struct NineBaseTexture9 *This,
-                                       D3DTEXTUREFILTERTYPE FilterType )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureBaseTexture9_SetAutoGenFilterType_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    args->arg1 = FilterType;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureBaseTexture9_GetAutoGenFilterType_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    *(D3DTEXTUREFILTERTYPE *)args->obj1 = NineBaseTexture9_GetAutoGenFilterType(This);
-}
-
-static D3DTEXTUREFILTERTYPE NINE_WINAPI
-PureBaseTexture9_GetAutoGenFilterType( struct NineBaseTexture9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-    D3DTEXTUREFILTERTYPE r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureBaseTexture9_GetAutoGenFilterType_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
+CREATE_FUNC_BLOCKING(BaseTexture9, GetAutoGenFilterType,,,
+					 D3DTEXTUREFILTERTYPE)
 
 static void
 PureBaseTexture9_PreLoad_rx( struct NineBaseTexture9 *This,
@@ -4453,78 +2335,14 @@ IDirect3DDevice9VideoVtbl PureDevice9Video_vtable = {
     (void *)PureDevice9Video_CreateCryptoSession
 };
 
-static void
-PureIndexBuffer9_Lock_rx( struct NineIndexBuffer9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(IndexBuffer9, Lock,,,
+					HRESULT,
+					 ARG_VAL(UINT, OffsetToPure),
+					 ARG_VAL(UINT, SizeToPure),
+					 ARG_REF(void *, ppbData),
+					 ARG_VAL(DWORD, Flags))
 
-    *args->result = NineIndexBuffer9_Lock(This,
-            args->arg1_u,
-            args->arg2_u,
-            (void **)args->obj2,
-            args->arg1);
-}
-
-static HRESULT NINE_WINAPI
-PureIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
-                       UINT OffsetToPure,
-                       UINT SizeToPure,
-                       void **ppbData,
-                       DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureIndexBuffer9_Lock_rx;
-    slot->this = This;
-    nine_bind(&slot->this, This);
-
-    args->arg1_u = OffsetToPure;
-    args->arg2_u = SizeToPure;
-    args->obj2 = (void *)ppbData;
-    args->arg1 = Flags;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureIndexBuffer9_Unlock_rx( struct NineIndexBuffer9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    (void) arg;
-
-    r = NineIndexBuffer9_Unlock(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureIndexBuffer9_Unlock( struct NineIndexBuffer9 *This )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureIndexBuffer9_Unlock_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(IndexBuffer9, Unlock,,,)
 
 IDirect3DIndexBuffer9Vtbl PureIndexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -4551,80 +2369,14 @@ IDirect3DPixelShader9Vtbl PurePixelShader9_vtable = {
     (void *)NinePixelShader9_GetFunction
 };
 
-static void
-PureQuery9_Issue_rx( struct NineQuery9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
+CREATE_FUNC_NON_BLOCKING(Query9, Issue,,,
+		ARG_VAL(DWORD, dwIssueFlags))
 
-    r = NineQuery9_Issue(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureQuery9_Issue( struct NineQuery9 *This,
-                  DWORD dwIssueFlags )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureQuery9_Issue_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    args->arg1 = dwIssueFlags;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureQuery9_GetData_rx( struct NineDevice9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineQuery9_GetData((struct NineQuery9 *)args->obj1,
-            args->obj2,
-            args->arg1,
-            args->arg2);
-}
-
-static HRESULT NINE_WINAPI
-PureQuery9_GetData( struct NineQuery9 *This,
-                    void *pData,
-                    DWORD dwSize,
-                    DWORD dwGetDataFlags )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureQuery9_GetData_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)This;
-    args->obj2 = pData;
-    args->arg1 = dwSize;
-    args->arg2 = dwGetDataFlags;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
+CREATE_FUNC_BLOCKING(Query9, GetData,,,
+					HRESULT,
+					 ARG_REF(void, pData),
+					 ARG_VAL(DWORD, dwSize),
+					 ARG_VAL(DWORD, dwGetDataFlags))
 
 IDirect3DQuery9Vtbl PureQuery9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -4637,63 +2389,8 @@ IDirect3DQuery9Vtbl PureQuery9_vtable = {
     (void *)PureQuery9_GetData
 };
 
-static void
-PureStateBlock9_Capture_rx( struct NineStateBlock9 *This,
-                       void *arg )
-{
-    HRESULT r;
-
-    r = NineStateBlock9_Capture(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureStateBlock9_Capture( struct NineStateBlock9 *This )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureStateBlock9_Capture_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureStateBlock9_Apply_rx( struct NineStateBlock9 *This,
-                       void *arg )
-{
-    HRESULT r;
-
-    r = NineStateBlock9_Apply(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureStateBlock9_Apply( struct NineStateBlock9 *This )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureStateBlock9_Apply_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(StateBlock9, Capture,,,)
+CREATE_FUNC_NON_BLOCKING(StateBlock9, Apply,,,)
 
 IDirect3DStateBlock9Vtbl PureStateBlock9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -4704,221 +2401,35 @@ IDirect3DStateBlock9Vtbl PureStateBlock9_vtable = {
     (void *)PureStateBlock9_Apply
 };
 
-static void
-PureSwapChain9_Present_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void4_result_args *args =
-            (struct csmt_dword3_void4_result_args *)arg;
+CREATE_FUNC_BLOCKING(SwapChain9, Present,,,
+					 HRESULT,
+					 ARG_REF(RECT, pSourceRect),
+					 ARG_REF(RECT, pDestRect),
+					 ARG_VAL(HWND, hDestWindowOverride),
+					 ARG_REF(RGNDATA, pDirtyRegion),
+					 ARG_VAL(DWORD, dwFlags))
 
-    *args->result = NineSwapChain9_Present(This,
-            (const RECT *)args->obj1,
-            (const RECT *)args->obj2,
-            (HWND)args->obj3,
-            (const RGNDATA *)args->obj4,
-            args->arg1);
-}
+CREATE_FUNC_BLOCKING(SwapChain9, GetFrontBufferData,,,
+					 HRESULT,
+					 ARG_REF(IDirect3DSurface9, pDestSurface))
 
-static HRESULT NINE_WINAPI
-PureSwapChain9_Present( struct NineSwapChain9 *This,
-                        const RECT *pSourceRect,
-                        const RECT *pDestRect,
-                        HWND hDestWindowOverride,
-                        const RGNDATA *pDirtyRegion,
-                        DWORD dwFlags )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void4_result_args *args;
-    HRESULT r;
+CREATE_FUNC_BLOCKING(SwapChain9, GetBackBuffer,,,
+					 HRESULT,
+					 ARG_VAL(UINT, iBackBuffer),
+					 ARG_VAL(D3DBACKBUFFER_TYPE, Type),
+					 ARG_REF(IDirect3DSurface9*, ppBackBuffer))
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_Present_rx;
-    slot->this = (void *)This;
+CREATE_FUNC_BLOCKING(SwapChain9, GetRasterStatus,,,
+					 HRESULT,
+					 ARG_REF(D3DRASTER_STATUS, pRasterStatus))
 
-    args->obj1 = (void *)pSourceRect;
-    args->obj2 = (void *)pDestRect;
-    args->obj3 = (void *)hDestWindowOverride;
-    args->obj4 = (void *)pDirtyRegion;
-    args->arg1 = dwFlags;
-    args->result = &r;
+CREATE_FUNC_BLOCKING(SwapChain9, GetDisplayMode,,,
+					 HRESULT,
+					 ARG_REF(D3DDISPLAYMODE, pMode))
 
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSwapChain9_GetFrontBufferData_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword1_void1_result_args *args =
-            (struct csmt_dword1_void1_result_args *)arg;
-
-    *args->result = NineSwapChain9_GetFrontBufferData(This,
-            (IDirect3DSurface9 *)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureSwapChain9_GetFrontBufferData( struct NineSwapChain9 *This,
-                                   IDirect3DSurface9 *pDestSurface )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword1_void1_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_void1_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_GetFrontBufferData_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pDestSurface;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSwapChain9_GetBackBuffer_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineSwapChain9_GetBackBuffer(This,
-            args->arg1_u,
-            args->arg1,
-            (IDirect3DSurface9 **)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureSwapChain9_GetBackBuffer( struct NineSwapChain9 *This,
-                              UINT iBackBuffer,
-                              D3DBACKBUFFER_TYPE Type,
-                              IDirect3DSurface9 **ppBackBuffer )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_GetBackBuffer_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)ppBackBuffer;
-    args->arg1 = Type;
-    args->arg1_u = iBackBuffer;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSwapChain9_GetRasterStatus_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword1_void1_result_args *args =
-            (struct csmt_dword1_void1_result_args *)arg;
-
-    *args->result = NineSwapChain9_GetRasterStatus(This,
-            (D3DRASTER_STATUS *)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureSwapChain9_GetRasterStatus( struct NineSwapChain9 *This,
-                                D3DRASTER_STATUS *pRasterStatus )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword1_void1_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_void1_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_GetRasterStatus_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pRasterStatus;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSwapChain9_GetDisplayMode_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword1_void1_result_args *args =
-            (struct csmt_dword1_void1_result_args *)arg;
-
-    *args->result = NineSwapChain9_GetDisplayMode(This,
-            (D3DDISPLAYMODE *)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureSwapChain9_GetDisplayMode( struct NineSwapChain9 *This,
-                               D3DDISPLAYMODE *pMode )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword1_void1_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_void1_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_GetDisplayMode_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pMode;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureSwapChain9_GetPresentParameters_rx( struct NineSwapChain9 *This,
-                       void *arg )
-{
-    struct csmt_dword1_void1_result_args *args =
-            (struct csmt_dword1_void1_result_args *)arg;
-
-    *args->result = NineSwapChain9_GetPresentParameters(This,
-            (D3DPRESENT_PARAMETERS *)args->obj1);
-}
-
-static HRESULT NINE_WINAPI
-PureSwapChain9_GetPresentParameters( struct NineSwapChain9 *This,
-                                     D3DPRESENT_PARAMETERS *pPresentationParameters )
-{
-    struct csmt_context *ctx = This->base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword1_void1_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_void1_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureSwapChain9_GetPresentParameters_rx;
-    slot->this = (void *)This;
-
-    args->obj1 = (void *)pPresentationParameters;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
+CREATE_FUNC_BLOCKING(SwapChain9, GetPresentParameters,,,
+					 HRESULT,
+					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters))
 
 IDirect3DSwapChain9Vtbl PureSwapChain9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -4947,19 +2458,10 @@ PureSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-static HRESULT NINE_WINAPI
-PureSwapChain9Ex_GetDisplayModeEx( struct NineSwapChain9Ex *This,
-                                   D3DDISPLAYMODEEX *pMode,
-                                   D3DDISPLAYROTATION *pRotation )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineSwapChain9Ex_GetDisplayModeEx(This, pMode, pRotation);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING(SwapChain9Ex, GetDisplayModeEx,,,
+					 HRESULT,
+					 ARG_REF(D3DDISPLAYMODEEX, pMode),
+					 ARG_REF(D3DDISPLAYROTATION, pRotation))
 
 IDirect3DSwapChain9ExVtbl PureSwapChain9Ex_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -4977,122 +2479,18 @@ IDirect3DSwapChain9ExVtbl PureSwapChain9Ex_vtable = {
     (void *)PureSwapChain9Ex_GetDisplayModeEx
 };
 
-static void
-PureTexture9_LockRect_rx( struct NineTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(Texture9, LockRect,,,
+					 HRESULT,
+					 ARG_VAL(UINT, Level),
+					 ARG_REF(D3DLOCKED_RECT, pPureedRect),
+					 ARG_REF(RECT, pRect),
+					 ARG_VAL(DWORD, Flags))
 
-    *args->result = NineTexture9_LockRect(This,
-            args->arg1_u,
-            (D3DLOCKED_RECT *)args->obj2,
-            (const RECT *)args->obj3,
-            args->arg1);
-}
+CREATE_FUNC_NON_BLOCKING(Texture9, UnlockRect,,,
+						 ARG_VAL(UINT, Level))
 
-static HRESULT NINE_WINAPI
-PureTexture9_LockRect( struct NineTexture9 *This,
-                       UINT Level,
-                       D3DLOCKED_RECT *pPureedRect,
-                       const RECT *pRect,
-                       DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureTexture9_LockRect_rx;
-    slot->this = (void *)This;
-
-    args->obj2 = (void *)pPureedRect;
-    args->obj3 = (void *)pRect;
-    args->arg1 = Flags;
-    args->arg1_u = Level;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureTexture9_UnlockRect_rx( struct NineTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_uint3_void_args *args =
-            (struct csmt_uint3_void_args *)arg;
-
-    r = NineTexture9_UnlockRect(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureTexture9_UnlockRect( struct NineTexture9 *This,
-                         UINT Level )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_uint3_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint3_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureTexture9_UnlockRect_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    args->arg1 = Level;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureTexture9_AddDirtyRect_rx( struct NineTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineTexture9_AddDirtyRect(This, args->rect1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureTexture9_AddDirtyRect( struct NineTexture9 *This,
-                           const RECT *pDirtyRect )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureTexture9_AddDirtyRect_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    if (pDirtyRect) {
-        args->rect1 = &args->_rect1;
-        args->_rect1 = *pDirtyRect;
-    } else {
-        args->rect1 = NULL;
-    }
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Texture9, AddDirtyRect,,,
+						 ARG_COPY_REF(RECT, pDirtyRect))
 
 IDirect3DTexture9Vtbl PureTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -5119,76 +2517,14 @@ IDirect3DTexture9Vtbl PureTexture9_vtable = {
     (void *)PureTexture9_AddDirtyRect
 };
 
-static void
-PureVertexBuffer9_Lock_rx( struct NineVertexBuffer9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(VertexBuffer9, Lock,,,
+					HRESULT,
+					 ARG_VAL(UINT, OffsetToPure),
+					 ARG_VAL(UINT, SizeToPure),
+					 ARG_REF(void *, ppbData),
+					 ARG_VAL(DWORD, Flags))
 
-    *args->result = NineVertexBuffer9_Lock(This,
-            args->arg1_u,
-            args->arg2_u,
-            (void **)args->obj2,
-            args->arg1);
-}
-
-static HRESULT NINE_WINAPI
-PureVertexBuffer9_Lock( struct NineVertexBuffer9 *This,
-                        UINT OffsetToPure,
-                        UINT SizeToPure,
-                        void **ppbData,
-                        DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVertexBuffer9_Lock_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = OffsetToPure;
-    args->arg2_u = SizeToPure;
-    args->obj2 = (void *)ppbData;
-    args->arg1 = Flags;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureVertexBuffer9_Unlock_rx( struct NineVertexBuffer9 *This,
-                       void *arg )
-{
-    HRESULT r;
-
-    r = NineVertexBuffer9_Unlock(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureVertexBuffer9_Unlock( struct NineVertexBuffer9 *This )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureVertexBuffer9_Unlock_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(VertexBuffer9, Unlock,,,)
 
 IDirect3DVertexBuffer9Vtbl PureVertexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -5223,109 +2559,18 @@ IDirect3DVertexShader9Vtbl PureVertexShader9_vtable = {
     (void *)NineVertexShader9_GetFunction
 };
 
-static void
-PureVolume9_GetContainer_rx( struct NineVolume9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(Volume9, GetContainer,,,
+					HRESULT,
+					 ARG_VAL(REFIID, riid),
+					 ARG_REF(void *, ppContainer))
 
-    *args->result = NineVolume9_GetContainer(This,
-            (REFIID)args->obj2,
-            (void **)args->obj3);
-}
+CREATE_FUNC_BLOCKING(Volume9, LockBox,,,
+					HRESULT,
+					 ARG_REF(D3DLOCKED_BOX, pPureedVolume),
+					 ARG_REF(D3DBOX, pBox),
+					 ARG_VAL(DWORD, Flags))
 
-static HRESULT NINE_WINAPI
-PureVolume9_GetContainer( struct NineVolume9 *This,
-                          REFIID riid,
-                          void **ppContainer )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVolume9_GetContainer_rx;
-    slot->this = (void *)This;
-
-    args->obj2 = (void *)riid;
-    args->obj3 = (void *)ppContainer;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureVolume9_LockBox_rx( struct NineVolume9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
-
-    *args->result = NineVolume9_LockBox(This,
-            (D3DLOCKED_BOX *)args->obj2,
-            (const D3DBOX *)args->obj3,
-            args->arg1);
-}
-
-static HRESULT NINE_WINAPI
-PureVolume9_LockBox( struct NineVolume9 *This,
-                     D3DLOCKED_BOX *pPureedVolume,
-                     const D3DBOX *pBox,
-                     DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVolume9_LockBox_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = Flags;
-    args->obj2 = (void *)pPureedVolume;
-    args->obj3 = (void *)pBox;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureVolume9_UnlockBox_rx( struct NineVolume9 *This,
-                       void *arg )
-{
-    HRESULT r;
-
-    r = NineVolume9_UnlockBox(This);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureVolume9_UnlockBox( struct NineVolume9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureVolume9_UnlockBox_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(Volume9, UnlockBox,,,)
 
 IDirect3DVolume9Vtbl PureVolume9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -5341,122 +2586,18 @@ IDirect3DVolume9Vtbl PureVolume9_vtable = {
     (void *)PureVolume9_UnlockBox
 };
 
-static void
-PureVolumeTexture9_LockBox_rx( struct NineVolumeTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING(VolumeTexture9, LockBox,,,
+					HRESULT,
+					 ARG_VAL(UINT, Level),
+					 ARG_REF(D3DLOCKED_BOX, pPureedVolume),
+					 ARG_REF(D3DBOX, pBox),
+					 ARG_VAL(DWORD, Flags))
 
-    *args->result = NineVolumeTexture9_LockBox(This,
-            args->arg1_u,
-            (D3DLOCKED_BOX *)args->obj2,
-            (const D3DBOX *)args->obj3,
-            args->arg1);
-}
+CREATE_FUNC_NON_BLOCKING(VolumeTexture9, UnlockBox,,,
+						 ARG_VAL(UINT, Level))
 
-static HRESULT NINE_WINAPI
-PureVolumeTexture9_LockBox( struct NineVolumeTexture9 *This,
-                            UINT Level,
-                            D3DLOCKED_BOX *pPureedVolume,
-                            const D3DBOX *pBox,
-                            DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVolumeTexture9_LockBox_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Level;
-    args->arg1 = Flags;
-    args->obj2 = (void *)pPureedVolume;
-    args->obj3 = (void *)pBox;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureVolumeTexture9_UnlockBox_rx( struct NineVolumeTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_uint3_void_args *args =
-            (struct csmt_uint3_void_args *)arg;
-
-    r = NineVolumeTexture9_UnlockBox(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureVolumeTexture9_UnlockBox( struct NineVolumeTexture9 *This,
-                              UINT Level )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_uint3_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint3_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVolumeTexture9_UnlockBox_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    args->arg1 = Level;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureVolumeTexture9_AddDirtyBox_rx( struct NineVolumeTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_uint_void_box_args *args =
-            (struct csmt_dword_uint_void_box_args *)arg;
-
-    r = NineVolumeTexture9_AddDirtyBox(This, args->box1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureVolumeTexture9_AddDirtyBox( struct NineVolumeTexture9 *This,
-                                const D3DBOX *pDirtyBox )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_uint_void_box_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_uint_void_box_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureVolumeTexture9_AddDirtyBox_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    if (pDirtyBox) {
-        args->box1 = &args->_box1;
-        args->_box1 = *pDirtyBox;
-    } else {
-        args->box1 = NULL;
-    }
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING(VolumeTexture9, AddDirtyBox,,,
+						 ARG_COPY_REF(D3DBOX, pDirtyBox))
 
 IDirect3DVolumeTexture9Vtbl PureVolumeTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -5534,6 +2675,7 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
     if (!ctx)
         return NULL;
 
+    //TODO
     ctx->vertex_uploader = u_upload_create(This->pipe, 1024 * 128,
                                             PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
     if (!ctx->vertex_uploader) {
@@ -5541,6 +2683,7 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
         return NULL;
     }
 
+    //TODO
     ctx->index_uploader = u_upload_create(This->pipe, 128 * 1024,
                                            PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_STREAM);
     if (!ctx->index_uploader) {
