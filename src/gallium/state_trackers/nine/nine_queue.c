@@ -156,7 +156,6 @@ queue_wait_slot_ready(struct concurrent_queue* ctx)
         pipe_condvar_wait(ctx->event, ctx->mutex);
     }
     pipe_mutex_unlock(ctx->mutex);
-
     return element;
 }
 
@@ -181,7 +180,7 @@ queue_set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element
 
     LEAVE_CRITICAL_SECTION();
 
-    pthread_yield();
+   // pthread_yield();
 }
 
 void

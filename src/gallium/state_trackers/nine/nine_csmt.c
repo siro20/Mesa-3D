@@ -137,53 +137,55 @@ PureResource9_GetPriority( struct NineResource9 *This )
 /* HOWTO
  *
  */
-CREATE_FUNC_NON_BLOCKING(Device9, EvictManagedResources,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, EvictManagedResources,,,)
 
-CREATE_FUNC_BLOCKING(Device9, Reset,,nine_csmt_reset(This);, HRESULT, ARG_COPY_REF(D3DPRESENT_PARAMETERS, pPresentationParameters) )
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, Reset,,nine_csmt_reset(This);,
+					 HRESULT,
+					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters) )
 
-CREATE_FUNC_BLOCKING(Device9, Present,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, Present,,,
                      HRESULT,
 					 ARG_REF(const RECT, pSourceRect),
 					 ARG_REF(const RECT, pDestRect),
 					 ARG_VAL(HWND, hDestWindowOverride),
 					 ARG_REF(const RGNDATA, pDirtyRegion))
 
-CREATE_FUNC_NON_BLOCKING(Device9, UpdateSurface,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, UpdateSurface,,,
 						 ARG_BIND_REF(IDirect3DSurface9, pSourceSurface),
 						 ARG_COPY_REF(RECT, pSourceRect),
 						 ARG_BIND_REF(IDirect3DSurface9, pDestinationSurface),
 						 ARG_COPY_REF(POINT, pDestPoint))
 
-CREATE_FUNC_NON_BLOCKING(Device9, UpdateTexture,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, UpdateTexture,,,
 						 ARG_BIND_REF(IDirect3DBaseTexture9, pSourceTexture),
 						 ARG_BIND_REF(IDirect3DBaseTexture9, pDestinationTexture))
 
-CREATE_FUNC_NON_BLOCKING(Device9, GetRenderTargetData,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, GetRenderTargetData,,,
 						 ARG_BIND_REF(IDirect3DSurface9, pRenderTarget),
 						 ARG_BIND_REF(IDirect3DSurface9, pDestSurface))
 
-CREATE_FUNC_BLOCKING(Device9, GetFrontBufferData,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetFrontBufferData,,,
 					 HRESULT,
 					 ARG_VAL(UINT, iSwapChain),
 					 ARG_REF(IDirect3DSurface9, pDestSurface))
 
-CREATE_FUNC_NON_BLOCKING(Device9, StretchRect,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, StretchRect,,,
 						 ARG_BIND_REF(IDirect3DSurface9, pSourceSurface),
 						 ARG_COPY_REF(RECT, pSourceRect),
 						 ARG_BIND_REF(IDirect3DSurface9, pDestSurface),
 						 ARG_COPY_REF(RECT, pDestRect),
 						 ARG_VAL(D3DTEXTUREFILTERTYPE, Filter))
 
-CREATE_FUNC_NON_BLOCKING(Device9, ColorFill,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, ColorFill,,,
 						 ARG_BIND_REF(IDirect3DSurface9, pSurface),
 						 ARG_COPY_REF(RECT, pRect),
 						 ARG_VAL(D3DCOLOR, color))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetRenderTarget,,,
+#if 0
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetRenderTarget,,,
 						 ARG_VAL(DWORD, RenderTargetIndex),
 						 ARG_BIND_REF(IDirect3DSurface9, pRenderTarget))
-
-#if 0
+#endif
 static void
 PureDevice9_SetRenderTarget_rx( struct NineDevice9 *This,
                                void *arg )
@@ -229,15 +231,14 @@ PureDevice9_SetRenderTarget( struct NineDevice9 *This,
 
     return D3D_OK;
 }
-#endif
-
+#if 0
 /* Available on PURE devices */
-CREATE_FUNC_BLOCKING(Device9, GetRenderTarget,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetRenderTarget,,,
 					 HRESULT,
 					 ARG_VAL(DWORD, RenderTargetIndex),
 					 ARG_REF(IDirect3DSurface9*, ppRenderTarget))
 
-#if 0
+#endif
 static HRESULT NINE_WINAPI
 PureDevice9_GetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
@@ -257,7 +258,7 @@ PureDevice9_GetRenderTarget( struct NineDevice9 *This,
     NineUnknown_AddRef(NineUnknown(ctx->rt[RenderTargetIndex]));
     return D3D_OK;
 }
-#endif
+
 
 static void
 PureDevice9_SetDepthStencilSurface_rx( struct NineDevice9 *This,
@@ -319,11 +320,11 @@ PureDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-CREATE_FUNC_NON_BLOCKING(Device9, BeginScene,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, BeginScene,,,)
 
-CREATE_FUNC_NON_BLOCKING(Device9, EndScene,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, EndScene,,,)
 
-CREATE_FUNC_NON_BLOCKING(Device9, Clear,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, Clear,,,
 						 ARG_VAL(DWORD, Count),
 						 ARG_COPY_REF(D3DRECT, pRects),
 						 ARG_VAL(DWORD, Flags),
@@ -331,25 +332,25 @@ CREATE_FUNC_NON_BLOCKING(Device9, Clear,,,
 						 ARG_VAL(float, Z),
 						 ARG_VAL(DWORD, Stencil))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetTransform,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetTransform,,,
 						 ARG_VAL(D3DTRANSFORMSTATETYPE, State),
 						 ARG_COPY_REF(D3DMATRIX, pMatrix))
 
-CREATE_FUNC_NON_BLOCKING(Device9, MultiplyTransform,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, MultiplyTransform,,,
 						 ARG_VAL(D3DTRANSFORMSTATETYPE, State),
 						 ARG_COPY_REF(D3DMATRIX, pMatrix))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetViewport,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetViewport,,,
 						 ARG_COPY_REF(D3DVIEWPORT9, pViewport))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetMaterial,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetMaterial,,,
 						 ARG_COPY_REF(D3DMATERIAL9, pMaterial))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetLight,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetLight,,,
 						 ARG_VAL(DWORD, Index),
 						 ARG_COPY_REF(D3DLIGHT9, pLight))
 
-CREATE_FUNC_NON_BLOCKING(Device9, LightEnable,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, LightEnable,,,
 						ARG_VAL(DWORD, Index),
 						ARG_VAL(BOOL, Enable))
 
@@ -388,40 +389,40 @@ PureDevice9_SetClipPlane( struct NineDevice9 *This,
     slot->this = (void *)This;
 
     args->Index = Index;
-    memcpy(&args->plane, pPlane, sizeof(args->plane));
+    memcpy(args->plane, pPlane, sizeof(args->plane));
 
     queue_set_slot_ready(ctx->queue, slot);
 
     return D3D_OK;
 }
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetRenderState,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetRenderState,,,
 						ARG_VAL(D3DRENDERSTATETYPE, State),
 						ARG_VAL(DWORD, Value))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetTexture,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetTexture,,,
 						ARG_VAL(DWORD, Stage),
 						ARG_BIND_REF(IDirect3DBaseTexture9, pTexture))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetTextureStageState,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetTextureStageState,,,
 						ARG_VAL(DWORD, Stage),
 						ARG_VAL(D3DTEXTURESTAGESTATETYPE, Type),
 						ARG_VAL(DWORD, Value))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetSamplerState,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetSamplerState,,,
 						ARG_VAL(DWORD, Sampler),
 						ARG_VAL(D3DTEXTURESTAGESTATETYPE, Type),
 						ARG_VAL(DWORD, Value))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetScissorRect,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetScissorRect,,,
 						ARG_COPY_REF(RECT, pRect))
 
-CREATE_FUNC_NON_BLOCKING(Device9, DrawPrimitive,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, DrawPrimitive,,,
 						ARG_VAL(D3DPRIMITIVETYPE, PrimitiveType),
 						ARG_VAL(UINT, StartVertex),
 						ARG_VAL(UINT, PrimitiveCount))
 
-CREATE_FUNC_NON_BLOCKING(Device9, DrawIndexedPrimitive,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, DrawIndexedPrimitive,,,
 						ARG_VAL(D3DPRIMITIVETYPE, PrimitiveType),
 						ARG_VAL(INT, BaseVertexIndex),
 						ARG_VAL(UINT, MinVertexIndex),
@@ -556,24 +557,42 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetVertexDeclaration,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetVertexDeclaration,,,
 						ARG_BIND_REF(IDirect3DVertexDeclaration9, pDecl))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetFVF,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetFVF,,,
 						ARG_VAL(DWORD, FVF))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetVertexShader,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetVertexShader,,,
 						ARG_BIND_REF(IDirect3DVertexShader9, pDecl))
 
+struct s_Device9_SetShaderConstantF {
+	UINT _StartRegister;
+	UINT _Vector4fCount;
+	float _vec[4 * 8];
+};
+
+struct s_Device9_SetShaderConstantI {
+	UINT _StartRegister;
+	UINT _Vector4iCount;
+	int _vec[4 * 256]; //XXX
+};
+
+struct s_Device9_SetShaderConstantB {
+	UINT _StartRegister;
+	UINT _BoolCount;
+	BOOL _vec[256];
+};
+
 static void
-PureDevice9_SetVertexShaderConstantF_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetVertexShaderConstantF_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
+    struct s_Device9_SetShaderConstantF *args =
+            (struct s_Device9_SetShaderConstantF *)arg;
 
-    r = NineDevice9_SetVertexShaderConstantF(This, args->arg1, (const float *)&args->vec1, args->arg2);
+    r = NineDevice9_SetVertexShaderConstantF(This, args->_StartRegister, (const float *)&args->_vec, args->_Vector4fCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -587,32 +606,30 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
     int i;
+    struct s_Device9_SetShaderConstantF *args;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (Vector4fCount == 1) {
-        struct csmt_uint2_vec4_args *args;
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetVertexShaderConstantF_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister;
-        args->arg2 = 1;
-        memcpy(&args->vec1, pConstantData, sizeof(float[4]));
+        args->_StartRegister = StartRegister;
+        args->_Vector4fCount = 1;
+        memcpy(&args->_vec, pConstantData, sizeof(float[4]));
         queue_set_slot_ready(ctx->queue, slot);
     } else {
-        struct csmt_uint2_vec32_args *args;
-
         for (i = 0; i < Vector4fCount; i+=8) {
-            slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec32_args), (void **)&args);
+            slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
             slot->data = args;
             slot->func = PureDevice9_SetVertexShaderConstantF_rx;
             slot->this = (void *)This;
 
-            args->arg1 = StartRegister + i;
-            args->arg2 = MIN2(Vector4fCount - i, 8);
-            memcpy(&args->vec1, &pConstantData[i * 4], sizeof(float[4]) * args->arg2);
+            args->_StartRegister = StartRegister + i;
+            args->_Vector4fCount = MIN2(Vector4fCount - i, 8);
+            memcpy(&args->_vec, &pConstantData[i * 4], sizeof(float[4]) * args->_Vector4fCount);
 
             queue_set_slot_ready(ctx->queue, slot);
         }
@@ -622,15 +639,14 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetVertexShaderConstantI_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetVertexShaderConstantI_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
+    struct s_Device9_SetShaderConstantI *args =
+            (struct s_Device9_SetShaderConstantI *)arg;
 
-    /* assume sizeof(int) == sizeof(float) */
-    r = NineDevice9_SetPixelShaderConstantB(This, args->arg1, (int *)&args->vec1, args->arg2);
+    r = NineDevice9_SetPixelShaderConstantI(This, args->_StartRegister, (int *)&args->_vec, args->_Vector4iCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -643,21 +659,20 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 {
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
-    struct csmt_uint2_vec4_args *args;
+    struct s_Device9_SetShaderConstantI *args;
     int i;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     for (i = 0; i < Vector4iCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetVertexShaderConstantI_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister + i;
-        args->arg2 = 1;
-        /* assume sizeof(int) == sizeof(float) */
-        memcpy(&args->vec1, &pConstantData[i * 4], sizeof(int[4]));
+        args->_StartRegister = StartRegister + i;
+        args->_Vector4iCount = 1;
+        memcpy(&args->_vec, &pConstantData[i * 4], sizeof(int[4]));
 
         queue_set_slot_ready(ctx->queue, slot);
     }
@@ -666,15 +681,14 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetVertexShaderConstantB_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetVertexShaderConstantB_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
+    struct s_Device9_SetShaderConstantB *args =
+            (struct s_Device9_SetShaderConstantB *)arg;
 
-    /* assume sizeof(BOOL) == sizeof(float) */
-    r = NineDevice9_SetVertexShaderConstantB(This, args->arg1, (BOOL *)&args->vec1, args->arg2);
+    r = NineDevice9_SetVertexShaderConstantB(This, args->_StartRegister, (BOOL *)&args->_vec, args->_BoolCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -682,26 +696,25 @@ PureDevice9_SetVertexShaderConstantB_rx( struct NineDevice9 *This,
 static HRESULT NINE_WINAPI
 PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
-                                     const int *pConstantData,
+                                     const BOOL *pConstantData,
                                      UINT BoolCount )
 {
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
-    struct csmt_uint2_vec4_args *args;
+    struct s_Device9_SetShaderConstantB *args;
     int i;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     for (i = 0; i < BoolCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetVertexShaderConstantB_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister + i;
-        args->arg2 = 1;
-        /* assume sizeof(BOOL) == sizeof(float) */
-        memcpy(&args->vec1, &pConstantData[i * 4], sizeof(BOOL[4]));
+        args->_StartRegister = StartRegister + i;
+        args->_BoolCount = 1;
+        memcpy(&args->_vec, &pConstantData[i], sizeof(BOOL));
 
         queue_set_slot_ready(ctx->queue, slot);
     }
@@ -709,31 +722,32 @@ PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     return D3D_OK;
 }
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetStreamSource,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetStreamSource,,,
 						ARG_VAL(UINT, StreamNumber),
 						ARG_BIND_REF(IDirect3DVertexBuffer9, pStreamData),
 						ARG_VAL(UINT, OffsetInBytes),
 						ARG_VAL(UINT, Stride))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetStreamSourceFreq,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetStreamSourceFreq,,,
 						ARG_VAL(UINT, StreamNumber),
 						ARG_VAL(UINT, Setting))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetIndices,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetIndices,,,
 						ARG_BIND_REF(IDirect3DIndexBuffer9, pIndexData))
 
-CREATE_FUNC_NON_BLOCKING(Device9, SetPixelShader,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetPixelShader,,,
 						ARG_BIND_REF(IDirect3DPixelShader9, pShader))
 
 static void
-PureDevice9_SetPixelShaderConstantF_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetPixelShaderConstantF_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
 
-    r = NineDevice9_SetPixelShaderConstantF(This, args->arg1, (const float *)&args->vec1, args->arg2);
+    struct s_Device9_SetShaderConstantF *args =
+            (struct s_Device9_SetShaderConstantF *)arg;
+
+    r = NineDevice9_SetPixelShaderConstantF(This, args->_StartRegister, (const float *)&args->_vec, args->_Vector4fCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -747,32 +761,31 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
     int i;
+    struct s_Device9_SetShaderConstantF *args;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     if (Vector4fCount == 1) {
-        struct csmt_uint2_vec4_args *args;
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetPixelShaderConstantF_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister;
-        args->arg2 = 1;
-        memcpy(&args->vec1, pConstantData, sizeof(float[4]));
+        args->_StartRegister = StartRegister;
+        args->_Vector4fCount = 1;
+        memcpy(&args->_vec, pConstantData, sizeof(float[4]));
         queue_set_slot_ready(ctx->queue, slot);
     } else {
-        struct csmt_uint2_vec32_args *args;
 
         for (i = 0; i < Vector4fCount; i+=8) {
-            slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec32_args), (void **)&args);
+            slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
             slot->data = args;
             slot->func = PureDevice9_SetPixelShaderConstantF_rx;
             slot->this = (void *)This;
 
-            args->arg1 = StartRegister + i;
-            args->arg2 = MIN2(Vector4fCount - i, 8);
-            memcpy(&args->vec1, &pConstantData[i * 4], sizeof(float[4]) * args->arg2);
+            args->_StartRegister = StartRegister + i;
+            args->_Vector4fCount = MIN2(Vector4fCount - i, 8);
+            memcpy(&args->_vec, &pConstantData[i * 4], sizeof(float[4]) * args->_Vector4fCount);
 
             queue_set_slot_ready(ctx->queue, slot);
         }
@@ -782,15 +795,15 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetPixelShaderConstantI_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetPixelShaderConstantI_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
 
-    /* assume sizeof(int) == sizeof(float) */
-    r = NineDevice9_SetPixelShaderConstantI(This, args->arg1, (int *)&args->vec1, args->arg2);
+    struct s_Device9_SetShaderConstantI *args =
+            (struct s_Device9_SetShaderConstantI *)arg;
+
+    r = NineDevice9_SetPixelShaderConstantI(This, args->_StartRegister, (int *)&args->_vec, args->_Vector4iCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -803,21 +816,20 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 {
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
-    struct csmt_uint2_vec4_args *args;
+    struct s_Device9_SetShaderConstantI *args;
     int i;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     for (i = 0; i < Vector4iCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetPixelShaderConstantI_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister + i;
-        args->arg2 = 1;
-        /* assume sizeof(int) == sizeof(float) */
-        memcpy(&args->vec1, &pConstantData[i * 4], sizeof(int[4]));
+        args->_StartRegister = StartRegister + i;
+        args->_Vector4iCount = 1;
+        memcpy(&args->_vec, &pConstantData[i * 4], sizeof(int[4]));
 
         queue_set_slot_ready(ctx->queue, slot);
     }
@@ -826,15 +838,14 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetPixelShaderConstantB_rx( struct NineDevice9 *This,
-                                     void *arg )
+PureDevice9_SetPixelShaderConstantB_rx( void *this, void *arg )
 {
     HRESULT r;
-    struct csmt_uint2_vec4_args *args =
-            (struct csmt_uint2_vec4_args *)arg;
+    struct NineDevice9 *This = (struct NineDevice9 *)this;
+    struct s_Device9_SetShaderConstantB *args =
+            (struct s_Device9_SetShaderConstantB *)arg;
 
-    /* assume sizeof(BOOL) == sizeof(float) */
-    r = NineDevice9_SetPixelShaderConstantB(This, args->arg1, (BOOL *)&args->vec1, args->arg2);
+    r = NineDevice9_SetPixelShaderConstantB(This, args->_StartRegister, (BOOL *)&args->_vec, args->_BoolCount);
     if (r != D3D_OK)
         ERR("Failed with error %x\n", r);
 }
@@ -842,26 +853,25 @@ PureDevice9_SetPixelShaderConstantB_rx( struct NineDevice9 *This,
 static HRESULT NINE_WINAPI
 PureDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
                                      UINT StartRegister,
-                                     const int *pConstantData,
+                                     const BOOL *pConstantData,
                                      UINT BoolCount )
 {
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
-    struct csmt_uint2_vec4_args *args;
+    struct s_Device9_SetShaderConstantB *args;
     int i;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     for (i = 0; i < BoolCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_uint2_vec4_args), (void **)&args);
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
         slot->data = args;
         slot->func = PureDevice9_SetPixelShaderConstantB_rx;
         slot->this = (void *)This;
 
-        args->arg1 = StartRegister + i;
-        args->arg2 = 1;
-        /* assume sizeof(BOOL) == sizeof(float) */
-        memcpy(&args->vec1, &pConstantData[i * 4], sizeof(BOOL[4]));
+        args->_StartRegister = StartRegister + i;
+        args->_BoolCount = 1;
+        memcpy(&args->_vec, &pConstantData[i], sizeof(BOOL));
 
         queue_set_slot_ready(ctx->queue, slot);
     }
@@ -893,123 +903,47 @@ PureDevice9_GetAvailableTextureMem( struct NineDevice9 *This )
     return NineDevice9_GetAvailableTextureMem(This);
 }
 
-static HRESULT NINE_WINAPI
-PureDevice9_GetDirect3D( struct NineDevice9 *This,
-                         IDirect3D9 **ppD3D9 )
-{
-    HRESULT r;
-    ERR("called\n");
-
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9_GetDirect3D(This, ppD3D9);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+/* available on PURE devices */
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetDirect3D,,,
+					 HRESULT,
+					 ARG_REF(IDirect3D9*, ppD3D9))
 
 /* available on PURE devices */
-CREATE_FUNC_BLOCKING(Device9, GetDisplayMode,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetDisplayMode,,,
 					 HRESULT,
 					 ARG_VAL(UINT, iSwapChain),
 					 ARG_REF(D3DDISPLAYMODE, pMode))
 
-static HRESULT NINE_WINAPI
-PureDevice9_SetCursorProperties( struct NineDevice9 *This,
-                                 UINT XHotSpot,
-                                 UINT YHotSpot,
-                                 IDirect3DSurface9 *pCursorBitmap )
-{
-    HRESULT r;
-    ERR("called\n");
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, SetCursorProperties,,,
+				 HRESULT,
+				 ARG_VAL(UINT, XHotSpot),
+				 ARG_VAL(UINT, YHotSpot),
+				 ARG_REF(IDirect3DSurface9, pCursorBitmap))
 
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineDevice9_SetCursorProperties(This, XHotSpot, YHotSpot, pCursorBitmap);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_NON_BLOCKING_NO_RESULT(Device9, SetCursorPosition,,,
+									ARG_VAL(int, X),
+									ARG_VAL(int, Y),
+									ARG_VAL(DWORD, Flags))
 
-static void
-PureDevice9_SetCursorPosition_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    struct csmt_dword3_args *args =
-            (struct csmt_dword3_args *)arg;
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, ShowCursor,,,
+				 HRESULT,
+				 ARG_VAL(BOOL, bShow))
 
-    NineDevice9_SetCursorPosition(This,
-            args->arg1,
-            args->arg2,
-            args->arg3);
-}
-
-static void NINE_WINAPI
-PureDevice9_SetCursorPosition( struct NineDevice9 *This,
-                               int X,
-                               int Y,
-                               DWORD Flags )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_SetCursorPosition_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = X;
-    args->arg2 = Y;
-    args->arg3 = Flags;
-
-    queue_set_slot_ready(ctx->queue, slot);
-}
-
-static void
-PureDevice9_ShowCursor_rx( struct NineDevice9 *This,
-                                     void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void_args *args =
-            (struct csmt_dword_void_args *)arg;
-
-    r = NineDevice9_ShowCursor(This, args->arg1);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-}
-
-static BOOL NINE_WINAPI
-PureDevice9_ShowCursor( struct NineDevice9 *This,
-                        BOOL bShow )
-{
-    struct csmt_context *ctx = This->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureDevice9_ShowCursor_rx;
-    slot->this = (void *)This;
-
-    args->arg1 = bShow;
-    //XXX return value
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-CREATE_FUNC_BLOCKING(Device9, CreateAdditionalSwapChain,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateAdditionalSwapChain,,,
 					 HRESULT,
 					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters),
 					 ARG_REF(IDirect3DSwapChain9*, pSwapChain))
 
-CREATE_FUNC_BLOCKING(Device9, GetSwapChain,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetSwapChain,,,
 					 HRESULT,
 					 ARG_VAL(UINT, iSwapChain),
 					 ARG_REF(IDirect3DSwapChain9*, pSwapChain))
 
-CREATE_FUNC_BLOCKING(Device9, GetNumberOfSwapChains,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetNumberOfSwapChains,,,
 					 UINT)
 
 /* Available on PURE devices */
-CREATE_FUNC_BLOCKING(Device9, GetBackBuffer,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetBackBuffer,,,
 					 HRESULT,
 					 ARG_VAL(UINT, iSwapChain),
 					 ARG_VAL(UINT, iBackBuffer),
@@ -1038,28 +972,18 @@ PureDevice9_SetDialogBoxMode( struct NineDevice9 *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-static void NINE_WINAPI
-PureDevice9_SetGammaRamp( struct NineDevice9 *This,
-                          UINT iSwapChain,
-                          DWORD Flags,
-                          const D3DGAMMARAMP *pRamp )
-{
-    pipe_mutex_lock(d3d_csmt_global);
-    NineDevice9_SetGammaRamp(This, iSwapChain, Flags, pRamp);
-    pipe_mutex_unlock(d3d_csmt_global);
-}
+CREATE_FUNC_NON_BLOCKING_NO_RESULT(Device9, SetGammaRamp,,,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_VAL(DWORD, Flags),
+					 ARG_COPY_REF(D3DGAMMARAMP, pRamp))
 
-static void NINE_WINAPI
-PureDevice9_GetGammaRamp( struct NineDevice9 *This,
-                          UINT iSwapChain,
-                          D3DGAMMARAMP *pRamp )
-{
-    ERR("called, but PURE device requested.\n");
-}
+CREATE_FUNC_BLOCKING_NO_RESULT(Device9, GetGammaRamp,,,
+					 ARG_VAL(UINT, iSwapChain),
+					 ARG_REF(D3DGAMMARAMP, pRamp))
 
 //     user_assert(ppTexture, D3DERR_INVALIDCALL);
 
-CREATE_FUNC_BLOCKING(Device9, CreateTexture,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateTexture,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Width),
 					 ARG_VAL(UINT, Height),
@@ -1072,7 +996,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateTexture,,,
 
 //     user_assert(ppVolumeTexture, D3DERR_INVALIDCALL);
 
-CREATE_FUNC_BLOCKING(Device9, CreateVolumeTexture,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateVolumeTexture,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Width),
 					 ARG_VAL(UINT, Height),
@@ -1086,7 +1010,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateVolumeTexture,,,
 
 //    user_assert(ppCubeTexture, D3DERR_INVALIDCALL);
 
-CREATE_FUNC_BLOCKING(Device9, CreateCubeTexture,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateCubeTexture,,,
 					 HRESULT,
 					 ARG_VAL(UINT, EdgeLength),
 					 ARG_VAL(UINT, Levels),
@@ -1098,7 +1022,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateCubeTexture,,,
 
  // user_assert(ppVertexBuffer, D3DERR_INVALIDCALL);
 
-CREATE_FUNC_BLOCKING(Device9, CreateVertexBuffer,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateVertexBuffer,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Length),
 					 ARG_VAL(DWORD, Usage),
@@ -1110,7 +1034,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateVertexBuffer,,,
 
 //    user_assert(ppIndexBuffer, D3DERR_INVALIDCALL);
 
-CREATE_FUNC_BLOCKING(Device9, CreateIndexBuffer,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateIndexBuffer,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Length),
 					 ARG_VAL(DWORD, Usage),
@@ -1120,7 +1044,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateIndexBuffer,,,
 					 ARG_REF(HANDLE, pSharedHandle))
 
 
-CREATE_FUNC_BLOCKING(Device9, CreateRenderTarget,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateRenderTarget,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Width),
 					 ARG_VAL(UINT, Height),
@@ -1131,7 +1055,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateRenderTarget,,,
 					 ARG_REF(IDirect3DSurface9*, ppSurface),
 					 ARG_REF(HANDLE, pSharedHandle))
 
-CREATE_FUNC_BLOCKING(Device9, CreateDepthStencilSurface,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateDepthStencilSurface,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Width),
 					 ARG_VAL(UINT, Height),
@@ -1142,7 +1066,7 @@ CREATE_FUNC_BLOCKING(Device9, CreateDepthStencilSurface,,,
 					 ARG_REF(IDirect3DSurface9*, ppSurface),
 					 ARG_REF(HANDLE, pSharedHandle))
 
-CREATE_FUNC_BLOCKING(Device9, CreateOffscreenPlainSurface,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateOffscreenPlainSurface,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Width),
 					 ARG_VAL(UINT, Height),
@@ -1152,34 +1076,34 @@ CREATE_FUNC_BLOCKING(Device9, CreateOffscreenPlainSurface,,,
 					 ARG_REF(HANDLE, pSharedHandle))
 
 /* allowed on PURE devices */
-CREATE_FUNC_BLOCKING(Device9, CreateStateBlock,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateStateBlock,,,
 					 HRESULT,
 					 ARG_VAL(D3DSTATEBLOCKTYPE, Type),
 					 ARG_REF(IDirect3DStateBlock9*, ppSB))
 
-CREATE_FUNC_BLOCKING(Device9, CreateVertexDeclaration,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateVertexDeclaration,,,
 					 HRESULT,
 					 ARG_REF(const D3DVERTEXELEMENT9, pVertexElements),
 					 ARG_REF(IDirect3DVertexDeclaration9*, ppDecl))
 
-CREATE_FUNC_BLOCKING(Device9, CreateVertexShader,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateVertexShader,,,
 					 HRESULT,
 					 ARG_REF(const DWORD, pFunction),
 					 ARG_REF(IDirect3DVertexShader9*, ppShader))
 
-CREATE_FUNC_BLOCKING(Device9, CreatePixelShader,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreatePixelShader,,,
 					 HRESULT,
 					 ARG_REF(const DWORD, pFunction),
 					 ARG_REF(IDirect3DPixelShader9*, ppShader))
 
-CREATE_FUNC_BLOCKING(Device9, CreateQuery,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, CreateQuery,,,
 					 HRESULT,
 					 ARG_VAL(D3DQUERYTYPE, Type),
 					 ARG_REF(IDirect3DQuery9*, ppQuery))
 
-CREATE_FUNC_NON_BLOCKING(Device9, BeginStateBlock,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, BeginStateBlock,,,)
 
-CREATE_FUNC_BLOCKING(Device9, EndStateBlock,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, EndStateBlock,,,
 		HRESULT,
 		ARG_REF(IDirect3DStateBlock9 *,ppSB))
 
@@ -1289,7 +1213,7 @@ PureDevice9_GetSamplerState( struct NineDevice9 *This,
     return D3DERR_INVALIDCALL;
 }
 
-CREATE_FUNC_BLOCKING(Device9, ValidateDevice,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, ValidateDevice,,,
 					HRESULT,
 					ARG_REF(DWORD, pNumPasses))
 
@@ -1657,7 +1581,7 @@ PureDevice9Ex_ComposeRects( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-CREATE_FUNC_BLOCKING(Device9Ex, PresentEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, PresentEx,,,
 					HRESULT,
 					ARG_REF(RECT, pSourceRect),
 					ARG_REF(RECT, pDestRect),
@@ -1665,7 +1589,7 @@ CREATE_FUNC_BLOCKING(Device9Ex, PresentEx,,,
 					ARG_REF(RGNDATA, pDirtyRegion),
 					ARG_VAL(DWORD, dwFlags))
 
-CREATE_FUNC_BLOCKING(Device9Ex, CheckDeviceState,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, CheckDeviceState,,,
 					HRESULT,
 					ARG_VAL(HWND, hDestinationWindow))
 
@@ -1712,7 +1636,7 @@ PureDevice9Ex_GetMaximumFrameLatency( struct NineDevice9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-CREATE_FUNC_BLOCKING(Device9Ex, CreateRenderTargetEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, CreateRenderTargetEx,,,
 					HRESULT,
 					ARG_VAL(UINT, Width),
 					ARG_VAL(UINT, Height),
@@ -1724,7 +1648,7 @@ CREATE_FUNC_BLOCKING(Device9Ex, CreateRenderTargetEx,,,
 					ARG_REF(HANDLE, pSharedHandle),
 					ARG_VAL(DWORD, Usage))
 
-CREATE_FUNC_BLOCKING(Device9Ex, CreateOffscreenPlainSurfaceEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, CreateOffscreenPlainSurfaceEx,,,
 					HRESULT,
 					ARG_VAL(UINT, Width),
 					ARG_VAL(UINT, Height),
@@ -1734,7 +1658,7 @@ CREATE_FUNC_BLOCKING(Device9Ex, CreateOffscreenPlainSurfaceEx,,,
 					ARG_REF(HANDLE, pSharedHandle),
 					ARG_VAL(DWORD, Usage))
 
-CREATE_FUNC_BLOCKING(Device9Ex, CreateDepthStencilSurfaceEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, CreateDepthStencilSurfaceEx,,,
 					HRESULT,
 					ARG_VAL(UINT, Width),
 					ARG_VAL(UINT, Height),
@@ -1746,12 +1670,12 @@ CREATE_FUNC_BLOCKING(Device9Ex, CreateDepthStencilSurfaceEx,,,
 					ARG_REF(HANDLE, pSharedHandle),
 					ARG_VAL(DWORD, Usage))
 
-CREATE_FUNC_BLOCKING(Device9Ex, ResetEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, ResetEx,,,
 					HRESULT,
 					ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters),
 					ARG_REF(D3DDISPLAYMODEEX, pFullscreenDisplayMode))
 
-CREATE_FUNC_BLOCKING(Device9Ex, GetDisplayModeEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9Ex, GetDisplayModeEx,,,
 					HRESULT,
 					ARG_VAL(UINT, iSwapChain),
 					ARG_REF(D3DDISPLAYMODEEX, pMode),
@@ -1894,18 +1818,18 @@ IDirect3DDevice9ExVtbl PureDevice9Ex_vtable = {
     (void *)PureDevice9Ex_GetDisplayModeEx
 };
 
-CREATE_FUNC_BLOCKING(Surface9, GetContainer,,,
-					HRESULT,
-						ARG_VAL(REFIID, riid),
-						ARG_REF(void *, ppContainer))
+CREATE_FUNC_BLOCKING_WITH_RESULT(Surface9, GetContainer,,,
+					 HRESULT,
+					 ARG_VAL(REFIID, riid),
+					 ARG_REF(void *, ppContainer))
 
-CREATE_FUNC_BLOCKING(Surface9, LockRect,,,
-					HRESULT,
-						ARG_REF(D3DLOCKED_RECT, pPureedRect),
-						ARG_REF(RECT, pRect),
-						ARG_VAL(DWORD, Flags))
+CREATE_FUNC_BLOCKING_WITH_RESULT(Surface9, LockRect,,,
+					 HRESULT,
+					 ARG_REF(D3DLOCKED_RECT, pPureedRect),
+					 ARG_REF(RECT, pRect),
+					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(Surface9, UnlockRect,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Surface9, UnlockRect,,,)
 
 static HRESULT NINE_WINAPI
 PureSurface9_GetDC( struct NineSurface9 *This,
@@ -1994,65 +1918,22 @@ IDirect3DAuthenticatedChannel9Vtbl PureAuthenticatedChannel9_vtable = {
     (void *)PureAuthenticatedChannel9_Configure
 };
 
-CREATE_FUNC_BLOCKING(BaseTexture9, SetLOD,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(BaseTexture9, SetLOD,,,
 					 DWORD,
 					 ARG_VAL(DWORD, LODNew))
 
-CREATE_FUNC_BLOCKING(BaseTexture9, GetLOD,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(BaseTexture9, GetLOD,,,
 					 DWORD)
 
-CREATE_FUNC_NON_BLOCKING(BaseTexture9, SetAutoGenFilterType,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(BaseTexture9, SetAutoGenFilterType,,,
 						 ARG_VAL(D3DTEXTUREFILTERTYPE, FilterType))
 
 
-CREATE_FUNC_BLOCKING(BaseTexture9, GetAutoGenFilterType,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(BaseTexture9, GetAutoGenFilterType,,,
 					 D3DTEXTUREFILTERTYPE)
 
-static void
-PureBaseTexture9_PreLoad_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    (void) arg;
-    NineBaseTexture9_PreLoad(This);
-}
-
-static void NINE_WINAPI
-PureBaseTexture9_PreLoad( struct NineBaseTexture9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureBaseTexture9_PreLoad_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-}
-
-static void
-PureBaseTexture9_GenerateMipSubLevels_rx( struct NineBaseTexture9 *This,
-                       void *arg )
-{
-    (void) arg;
-    NineBaseTexture9_GenerateMipSubLevels(This);
-}
-
-static void NINE_WINAPI
-PureBaseTexture9_GenerateMipSubLevels( struct NineBaseTexture9 *This )
-{
-    struct csmt_context *ctx = This->base.base.device->csmt_context;
-    struct queue_element* slot;
-
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
-    slot->data = NULL;
-    slot->func = PureBaseTexture9_GenerateMipSubLevels_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    queue_set_slot_ready(ctx->queue, slot);
-}
+CREATE_FUNC_NON_BLOCKING_NO_RESULT(BaseTexture9, PreLoad,,,)
+CREATE_FUNC_NON_BLOCKING_NO_RESULT(BaseTexture9, GenerateMipSubLevels,,,)
 
 static HRESULT NINE_WINAPI
 PureCryptoSession9_GetCertificateSize( struct NineCryptoSession9 *This,
@@ -2144,134 +2025,21 @@ IDirect3DCryptoSession9Vtbl PureCryptoSession9_vtable = {
     (void *)PureCryptoSession9_GetEncryptionBltKey
 };
 
-static void
-PureCubeTexture9_LockRect_rx( struct NineCubeTexture9 *This,
-                       void *arg )
-{
-    struct csmt_dword3_void3_uint4_result_args *args =
-            (struct csmt_dword3_void3_uint4_result_args *)arg;
+CREATE_FUNC_BLOCKING_WITH_RESULT(CubeTexture9, LockRect,,,
+					 HRESULT,
+					 ARG_VAL(D3DCUBEMAP_FACES, FaceType),
+					 ARG_VAL(UINT, Level),
+					 ARG_REF(D3DLOCKED_RECT, pPureedRect),
+					 ARG_REF(RECT, pRect),
+					 ARG_VAL(DWORD, Flags))
 
-    *args->result = NineCubeTexture9_LockRect(This,
-            args->arg1,
-            args->arg1_u,
-            (D3DLOCKED_RECT *)args->obj2,
-            (const RECT *)args->obj3,
-            args->arg2);
-}
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(CubeTexture9, UnlockRect,,,
+					 ARG_VAL(D3DCUBEMAP_FACES, FaceType),
+					 ARG_VAL(UINT, Level))
 
-static HRESULT NINE_WINAPI
-PureCubeTexture9_LockRect( struct NineCubeTexture9 *This,
-                           D3DCUBEMAP_FACES FaceType,
-                           UINT Level,
-                           D3DLOCKED_RECT *pPureedRect,
-                           const RECT *pRect,
-                           DWORD Flags )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword3_void3_uint4_result_args *args;
-    HRESULT r;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureCubeTexture9_LockRect_rx;
-    slot->this = (void *)This;
-
-    args->arg1_u = Level;
-    args->arg1 = FaceType;
-    args->arg2 = Flags;
-    args->obj2 = (void *)pPureedRect;
-    args->obj3 = (void *)pRect;
-    args->result = &r;
-
-    queue_set_slot_ready_and_wait(ctx->queue, slot);
-
-    return r;
-}
-
-static void
-PureCubeTexture9_UnlockRect_rx( struct NineCubeTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_uint_void_box_args *args =
-            (struct csmt_dword_uint_void_box_args *)arg;
-
-    r = NineCubeTexture9_UnlockRect(This,
-            args->arg1,
-            args->arg1_u);
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureCubeTexture9_UnlockRect( struct NineCubeTexture9 *This,
-                             D3DCUBEMAP_FACES FaceType,
-                             UINT Level )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_uint_void_box_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_uint_void_box_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureCubeTexture9_UnlockRect_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    args->arg1_u = Level;
-    args->arg1 = FaceType;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
-
-static void
-PureCubeTexture9_AddDirtyRect_rx( struct NineCubeTexture9 *This,
-                       void *arg )
-{
-    HRESULT r;
-    struct csmt_dword_void2_rect2_point_args *args =
-            (struct csmt_dword_void2_rect2_point_args *)arg;
-
-    r = NineCubeTexture9_AddDirtyRect(This,
-            args->arg1,
-            args->rect1);
-
-    if (r != D3D_OK)
-        ERR("Failed with error %x\n", r);
-    nine_bind(&This, NULL);
-}
-
-static HRESULT NINE_WINAPI
-PureCubeTexture9_AddDirtyRect( struct NineCubeTexture9 *This,
-                               D3DCUBEMAP_FACES FaceType,
-                               const RECT *pDirtyRect )
-{
-    struct csmt_context *ctx = This->base.base.base.device->csmt_context;
-    struct queue_element* slot;
-    struct csmt_dword_void2_rect2_point_args *args;
-
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword_void2_rect2_point_args), (void **)&args);
-    slot->data = args;
-    slot->func = PureCubeTexture9_AddDirtyRect_rx;
-    slot->this = NULL;
-    nine_bind(&slot->this, This);
-
-    if (pDirtyRect) {
-        args->rect1 = &args->_rect1;
-        args->_rect1 = *pDirtyRect;
-    } else {
-        args->rect1 = NULL;
-    }
-    args->arg1 = FaceType;
-
-    queue_set_slot_ready(ctx->queue, slot);
-
-    return D3D_OK;
-}
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(CubeTexture9, AddDirtyRect,,,
+					 ARG_VAL(D3DCUBEMAP_FACES, FaceType),
+					 ARG_COPY_REF(RECT, pDirtyRect))
 
 IDirect3DCubeTexture9Vtbl PureCubeTexture9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -2335,14 +2103,81 @@ IDirect3DDevice9VideoVtbl PureDevice9Video_vtable = {
     (void *)PureDevice9Video_CreateCryptoSession
 };
 
-CREATE_FUNC_BLOCKING(IndexBuffer9, Lock,,,
+#if 0
+struct s_IndexBuffer9_Lock_private {
+	HRESULT *_result;
+	HRESULT __result;
+	UINT _OffsetToPure;
+	UINT _SizeToPure;
+	void **_ppbData;
+	void *__ppbData;
+	DWORD _Flags;
+};
+
+CREATE_SINK_WITH_RESULT(IndexBuffer9, Lock,
+						ARG_VAL(UINT, OffsetToPure),
+						ARG_VAL(UINT, SizeToPure),
+						ARG_REF(void *, ppbData),
+						ARG_VAL(DWORD, Flags))
+
+static HRESULT NINE_WINAPI
+PureIndexBuffer9_Lock( struct NineIndexBuffer9 *This,
+					UINT OffsetToPure,
+					UINT SizeToPure,
+					void **ppbData,
+					DWORD Flags )
+{
+    GET_CONTEXT(IndexBuffer9)
+    struct queue_element* slot;
+    struct s_IndexBuffer9_Lock_private *args;
+    HRESULT r;
+
+    user_assert(ppbData, D3DERR_INVALIDCALL);
+
+    if (This->base.base.pool == D3DPOOL_MANAGED) {
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_IndexBuffer9_Lock_private), (void **)&args);
+        slot->data = args;
+        slot->func = PureIndexBuffer9_Lock_rx;
+
+        THIS_BIND_FUNC(IndexBuffer9)
+
+        args->_result = &args->__result;
+        args->_OffsetToPure = OffsetToPure;
+    	args->_SizeToPure = SizeToPure;
+    	args->_ppbData = &args->__ppbData;
+    	args->_Flags = Flags;
+        queue_set_slot_ready(ctx->queue, slot);
+
+        *ppbData = (char *)This->base.managed.data + OffsetToPure;
+
+        r = D3D_OK;
+    } else {
+		slot = queue_get_free_slot(ctx->queue, sizeof(struct s_IndexBuffer9_Lock_private), (void **)&args);
+		slot->data = args;
+		slot->func = PureIndexBuffer9_Lock_rx;
+		slot->this = (void *)This;
+
+		args->_result = &r;
+		args->_OffsetToPure = OffsetToPure;
+		args->_SizeToPure = SizeToPure;
+		args->_ppbData = ppbData;
+		args->_Flags = Flags;
+
+		queue_set_slot_ready_and_wait(ctx->queue, slot);
+    }
+
+    return r;
+}
+#endif
+
+CREATE_FUNC_BLOCKING_WITH_RESULT(IndexBuffer9, Lock,,,
 					HRESULT,
 					 ARG_VAL(UINT, OffsetToPure),
 					 ARG_VAL(UINT, SizeToPure),
 					 ARG_REF(void *, ppbData),
 					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(IndexBuffer9, Unlock,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(IndexBuffer9, Unlock,,,)
 
 IDirect3DIndexBuffer9Vtbl PureIndexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -2369,10 +2204,10 @@ IDirect3DPixelShader9Vtbl PurePixelShader9_vtable = {
     (void *)NinePixelShader9_GetFunction
 };
 
-CREATE_FUNC_NON_BLOCKING(Query9, Issue,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Query9, Issue,,,
 		ARG_VAL(DWORD, dwIssueFlags))
 
-CREATE_FUNC_BLOCKING(Query9, GetData,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Query9, GetData,,,
 					HRESULT,
 					 ARG_REF(void, pData),
 					 ARG_VAL(DWORD, dwSize),
@@ -2389,8 +2224,8 @@ IDirect3DQuery9Vtbl PureQuery9_vtable = {
     (void *)PureQuery9_GetData
 };
 
-CREATE_FUNC_NON_BLOCKING(StateBlock9, Capture,,,)
-CREATE_FUNC_NON_BLOCKING(StateBlock9, Apply,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(StateBlock9, Capture,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(StateBlock9, Apply,,,)
 
 IDirect3DStateBlock9Vtbl PureStateBlock9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -2401,7 +2236,7 @@ IDirect3DStateBlock9Vtbl PureStateBlock9_vtable = {
     (void *)PureStateBlock9_Apply
 };
 
-CREATE_FUNC_BLOCKING(SwapChain9, Present,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, Present,,,
 					 HRESULT,
 					 ARG_REF(RECT, pSourceRect),
 					 ARG_REF(RECT, pDestRect),
@@ -2409,25 +2244,25 @@ CREATE_FUNC_BLOCKING(SwapChain9, Present,,,
 					 ARG_REF(RGNDATA, pDirtyRegion),
 					 ARG_VAL(DWORD, dwFlags))
 
-CREATE_FUNC_BLOCKING(SwapChain9, GetFrontBufferData,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, GetFrontBufferData,,,
 					 HRESULT,
 					 ARG_REF(IDirect3DSurface9, pDestSurface))
 
-CREATE_FUNC_BLOCKING(SwapChain9, GetBackBuffer,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, GetBackBuffer,,,
 					 HRESULT,
 					 ARG_VAL(UINT, iBackBuffer),
 					 ARG_VAL(D3DBACKBUFFER_TYPE, Type),
 					 ARG_REF(IDirect3DSurface9*, ppBackBuffer))
 
-CREATE_FUNC_BLOCKING(SwapChain9, GetRasterStatus,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, GetRasterStatus,,,
 					 HRESULT,
 					 ARG_REF(D3DRASTER_STATUS, pRasterStatus))
 
-CREATE_FUNC_BLOCKING(SwapChain9, GetDisplayMode,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, GetDisplayMode,,,
 					 HRESULT,
 					 ARG_REF(D3DDISPLAYMODE, pMode))
 
-CREATE_FUNC_BLOCKING(SwapChain9, GetPresentParameters,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9, GetPresentParameters,,,
 					 HRESULT,
 					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters))
 
@@ -2458,7 +2293,7 @@ PureSwapChain9Ex_GetPresentStats( struct NineSwapChain9Ex *This,
     STUB(D3DERR_INVALIDCALL);
 }
 
-CREATE_FUNC_BLOCKING(SwapChain9Ex, GetDisplayModeEx,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(SwapChain9Ex, GetDisplayModeEx,,,
 					 HRESULT,
 					 ARG_REF(D3DDISPLAYMODEEX, pMode),
 					 ARG_REF(D3DDISPLAYROTATION, pRotation))
@@ -2479,17 +2314,17 @@ IDirect3DSwapChain9ExVtbl PureSwapChain9Ex_vtable = {
     (void *)PureSwapChain9Ex_GetDisplayModeEx
 };
 
-CREATE_FUNC_BLOCKING(Texture9, LockRect,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Texture9, LockRect,,,
 					 HRESULT,
 					 ARG_VAL(UINT, Level),
 					 ARG_REF(D3DLOCKED_RECT, pPureedRect),
 					 ARG_REF(RECT, pRect),
 					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(Texture9, UnlockRect,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Texture9, UnlockRect,,,
 						 ARG_VAL(UINT, Level))
 
-CREATE_FUNC_NON_BLOCKING(Texture9, AddDirtyRect,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Texture9, AddDirtyRect,,,
 						 ARG_COPY_REF(RECT, pDirtyRect))
 
 IDirect3DTexture9Vtbl PureTexture9_vtable = {
@@ -2517,14 +2352,80 @@ IDirect3DTexture9Vtbl PureTexture9_vtable = {
     (void *)PureTexture9_AddDirtyRect
 };
 
-CREATE_FUNC_BLOCKING(VertexBuffer9, Lock,,,
+#if 0
+struct s_VertexBuffer9_Lock_private {
+	HRESULT *_result;
+	HRESULT __result;
+	UINT _OffsetToPure;
+	UINT _SizeToPure;
+	void **_ppbData;
+	void *__ppbData;
+	DWORD _Flags;
+};
+
+CREATE_SINK_WITH_RESULT(VertexBuffer9, Lock,
+						ARG_VAL(UINT, OffsetToPure),
+						ARG_VAL(UINT, SizeToPure),
+						ARG_REF(void *, ppbData),
+						ARG_VAL(DWORD, Flags))
+
+static HRESULT NINE_WINAPI
+PureVertexBuffer9_Lock( struct NineVertexBuffer9 *This,
+					UINT OffsetToPure,
+					UINT SizeToPure,
+					void **ppbData,
+					DWORD Flags )
+{
+    GET_CONTEXT(VertexBuffer9)
+    struct queue_element* slot;
+    struct s_VertexBuffer9_Lock_private *args;
+    HRESULT r;
+
+    user_assert(ppbData, D3DERR_INVALIDCALL);
+
+    if (This->base.base.pool == D3DPOOL_MANAGED) {
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_VertexBuffer9_Lock_private), (void **)&args);
+        slot->data = args;
+        slot->func = PureVertexBuffer9_Lock_rx;
+
+        THIS_BIND_FUNC(VertexBuffer9)
+
+        args->_result = &args->__result;
+        args->_OffsetToPure = OffsetToPure;
+    	args->_SizeToPure = SizeToPure;
+    	args->_ppbData = &args->__ppbData;
+    	args->_Flags = Flags;
+        queue_set_slot_ready(ctx->queue, slot);
+
+        *ppbData = (char *)This->base.managed.data + OffsetToPure;
+
+        r = D3D_OK;
+    } else {
+		slot = queue_get_free_slot(ctx->queue, sizeof(struct s_VertexBuffer9_Lock_private), (void **)&args);
+		slot->data = args;
+		slot->func = PureVertexBuffer9_Lock_rx;
+		slot->this = (void *)This;
+
+		args->_result = &r;
+		args->_OffsetToPure = OffsetToPure;
+		args->_SizeToPure = SizeToPure;
+		args->_ppbData = ppbData;
+		args->_Flags = Flags;
+
+		queue_set_slot_ready_and_wait(ctx->queue, slot);
+    }
+
+    return r;
+}
+#endif
+CREATE_FUNC_BLOCKING_WITH_RESULT(VertexBuffer9, Lock,,,
 					HRESULT,
 					 ARG_VAL(UINT, OffsetToPure),
 					 ARG_VAL(UINT, SizeToPure),
 					 ARG_REF(void *, ppbData),
 					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(VertexBuffer9, Unlock,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(VertexBuffer9, Unlock,,,)
 
 IDirect3DVertexBuffer9Vtbl PureVertexBuffer9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -2559,18 +2460,18 @@ IDirect3DVertexShader9Vtbl PureVertexShader9_vtable = {
     (void *)NineVertexShader9_GetFunction
 };
 
-CREATE_FUNC_BLOCKING(Volume9, GetContainer,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Volume9, GetContainer,,,
 					HRESULT,
 					 ARG_VAL(REFIID, riid),
 					 ARG_REF(void *, ppContainer))
 
-CREATE_FUNC_BLOCKING(Volume9, LockBox,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Volume9, LockBox,,,
 					HRESULT,
 					 ARG_REF(D3DLOCKED_BOX, pPureedVolume),
 					 ARG_REF(D3DBOX, pBox),
 					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(Volume9, UnlockBox,,,)
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Volume9, UnlockBox,,,)
 
 IDirect3DVolume9Vtbl PureVolume9_vtable = {
     (void *)NineUnknown_QueryInterface,
@@ -2586,17 +2487,17 @@ IDirect3DVolume9Vtbl PureVolume9_vtable = {
     (void *)PureVolume9_UnlockBox
 };
 
-CREATE_FUNC_BLOCKING(VolumeTexture9, LockBox,,,
+CREATE_FUNC_BLOCKING_WITH_RESULT(VolumeTexture9, LockBox,,,
 					HRESULT,
 					 ARG_VAL(UINT, Level),
 					 ARG_REF(D3DLOCKED_BOX, pPureedVolume),
 					 ARG_REF(D3DBOX, pBox),
 					 ARG_VAL(DWORD, Flags))
 
-CREATE_FUNC_NON_BLOCKING(VolumeTexture9, UnlockBox,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(VolumeTexture9, UnlockBox,,,
 						 ARG_VAL(UINT, Level))
 
-CREATE_FUNC_NON_BLOCKING(VolumeTexture9, AddDirtyBox,,,
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(VolumeTexture9, AddDirtyBox,,,
 						 ARG_COPY_REF(D3DBOX, pDirtyBox))
 
 IDirect3DVolumeTexture9Vtbl PureVolumeTexture9_vtable = {

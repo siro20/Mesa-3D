@@ -211,7 +211,31 @@
 
 // serialization and deserialization
 
+#define CREATE_SINK_NO_RESULT_UNBIND(name, func, ...) \
+static void \
+Pure##name##_##func##_rx( void *this, void *arg ) { \
+    struct Nine ## name *This = (struct Nine ## name *) this; \
+    struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
+    (void) args; \
+    Nine##name##_##func( \
+        This ARGS_FOR_CALL( __VA_ARGS__ ) \
+    ); \
+    THIS_UNBIND_FUNC(name) ;\
+    ARGS_FOR_UNBIND( __VA_ARGS__ ) ;\
+}
+
 #define CREATE_SINK_NO_RESULT(name, func, ...) \
+static void \
+Pure##name##_##func##_rx( void *this, void *arg ) { \
+    struct Nine ## name *This = (struct Nine ## name *) this; \
+    struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
+    (void) args; \
+    Nine##name##_##func( \
+        This ARGS_FOR_CALL( __VA_ARGS__ ) \
+    ); \
+}
+
+#define CREATE_SINK_PRINT_RESULT(name, func, ...) \
 static void \
 Pure##name##_##func##_rx( void *this, void *arg ) { \
     HRESULT r; \
@@ -262,6 +286,30 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     return D3D_OK; \
 }
 
+#define CREATE_SOURCE_NO_RESULT(name, function, pre, post, ...) \
+static void NINE_WINAPI \
+Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS__ ) ) \
+{ \
+    GET_CONTEXT(name) \
+    struct queue_element* slot; \
+    struct s_##name##_##function##_private *args; \
+    \
+    if (sizeof(struct s_##name##_##function##_private)) { \
+        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
+        slot->data = args; \
+    } else { \
+        slot = queue_get_free_slot(ctx->queue, 0, NULL); \
+        slot->data = NULL; \
+    } \
+    slot->func = Pure##name##_##function##_rx; \
+    THIS_BIND_FUNC(name) ;\
+    ARGS_FOR_ASSIGN( __VA_ARGS__ ) ;\
+    pre ;\
+    queue_set_slot_ready(ctx->queue, slot); \
+    post ;\
+}
+
+
 #define CREATE_SOURCE_WITH_RESULT(name, function, pre, post, ret, ...) \
 static ret NINE_WINAPI \
 Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS__ ) ) \
@@ -291,15 +339,25 @@ Pure##name##_##func( struct Nine##name This DEFINE_ARGS(__VA_ARGS__) ) \
     STUB(D3DERR_INVALIDCALL); \
 }
 
-#define CREATE_FUNC_NON_BLOCKING(name, func, pre, post, ...) \
+#define CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(name, func, pre, post, ...) \
 struct s_##name##_##func##_private { ARGS_FOR_STRUCT( __VA_ARGS__ ) }; \
-CREATE_SINK_NO_RESULT(name, func, __VA_ARGS__) \
+CREATE_SINK_PRINT_RESULT(name, func, __VA_ARGS__) \
 CREATE_SOURCE_D3D_OK_RESULT(name, func, pre, post, __VA_ARGS__)
 
-#define CREATE_FUNC_BLOCKING(name, func, pre, post, ret, ...) \
+#define CREATE_FUNC_NON_BLOCKING_NO_RESULT(name, func, pre, post, ...) \
+struct s_##name##_##func##_private { ARGS_FOR_STRUCT( __VA_ARGS__ ) }; \
+CREATE_SINK_NO_RESULT_UNBIND(name, func, __VA_ARGS__) \
+CREATE_SOURCE_NO_RESULT(name, func, pre, post, __VA_ARGS__)
+
+#define CREATE_FUNC_BLOCKING_WITH_RESULT(name, func, pre, post, ret, ...) \
 struct s_##name##_##func##_private { ret *_result; ARGS_FOR_STRUCT( __VA_ARGS__ ) }; \
 CREATE_SINK_WITH_RESULT(name, func, __VA_ARGS__) \
 CREATE_SOURCE_WITH_RESULT(name, func, pre, post, ret, __VA_ARGS__)
+
+#define CREATE_FUNC_BLOCKING_NO_RESULT(name, func, pre, post, ...) \
+struct s_##name##_##func##_private { ARGS_FOR_STRUCT( __VA_ARGS__ ) }; \
+CREATE_SINK_NO_RESULT(name, func, __VA_ARGS__) \
+CREATE_SOURCE_NO_RESULT(name, func, pre, post, __VA_ARGS__)
 
 /* struct, assign func, tx arg list, rx arg list */
 #define ARG_VAL(x, y) x _##y ; , args->_##y = y ; , x y , args->_##y ,
