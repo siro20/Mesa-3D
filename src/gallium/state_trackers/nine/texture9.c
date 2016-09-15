@@ -200,8 +200,7 @@ NineTexture9_ctor( struct NineTexture9 *This,
 
         hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
                               This->base.base.resource, user_buffer_for_level,
-                              D3DRTYPE_TEXTURE, l, 0,
-                              &sfdesc, &This->surfaces[l]);
+                              l, 0, &sfdesc, &This->surfaces[l]);
         if (FAILED(hr))
             return hr;
     }

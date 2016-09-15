@@ -65,7 +65,6 @@ NineSurface9_new( struct NineDevice9 *pDevice,
                   struct NineUnknown *pContainer,
                   struct pipe_resource *pResource,
                   void *user_buffer,
-                  uint8_t TextureType, /* 0 if pContainer isn't BaseTexure9 */
                   unsigned Level,
                   unsigned Layer,
                   D3DSURFACE_DESC *pDesc,
@@ -77,7 +76,6 @@ NineSurface9_ctor( struct NineSurface9 *This,
                    struct NineUnknown *pContainer,
                    struct pipe_resource *pResource,
                    void *user_buffer,
-                   uint8_t TextureType,
                    unsigned Level,
                    unsigned Layer,
                    D3DSURFACE_DESC *pDesc );
@@ -142,7 +140,7 @@ NineSurface9_CopyDefaultToMem( struct NineSurface9 *This,
 static inline boolean
 NineSurface9_IsOffscreenPlain (struct NineSurface9 *This )
 {
-    return This->base.usage == 0 && !This->texture;
+    return This->base.usage == 0 && !NineUnknown(This)->container;
 }
 
 static inline void

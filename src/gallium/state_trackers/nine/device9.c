@@ -1172,7 +1172,7 @@ create_zs_or_rt_surface(struct NineDevice9 *This,
     } else {
         resource = NULL;
     }
-    hr = NineSurface9_new(This, NULL, resource, NULL, 0, 0, 0, &desc, &surface);
+    hr = NineSurface9_new(This, NULL, resource, NULL, 0, 0, &desc, &surface);
     pipe_resource_reference(&resource, NULL);
 
     if (SUCCEEDED(hr)) {

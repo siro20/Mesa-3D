@@ -48,7 +48,6 @@ NineSurface9_ctor( struct NineSurface9 *This,
                    struct NineUnknown *pContainer,
                    struct pipe_resource *pResource,
                    void *user_buffer,
-                   uint8_t TextureType,
                    unsigned Level,
                    unsigned Layer,
                    D3DSURFACE_DESC *pDesc )
@@ -75,7 +74,7 @@ NineSurface9_ctor( struct NineSurface9 *This,
     assert(!user_buffer || pDesc->Pool != D3DPOOL_DEFAULT);
     /* The only way we can have !pContainer is being created
      * from create_zs_or_rt_surface with params 0 0 0 */
-    assert(pContainer || (Level == 0 && Layer == 0 && TextureType == 0));
+    assert(pContainer || (Level == 0 && Layer == 0));
     /* Make sure no resource is passed for pool systemmem */
     assert(pDesc->Pool != D3DPOOL_SYSTEMMEM || !pResource);
 
@@ -147,7 +146,6 @@ NineSurface9_ctor( struct NineSurface9 *This,
     This->pipe = This->base.base.device->pipe;
     This->transfer = NULL;
 
-    This->texture = TextureType;
     This->level = Level;
     This->level_actual = Level;
     This->layer = Layer;
@@ -268,19 +266,22 @@ NineSurface9_GetContainer( struct NineSurface9 *This,
 void
 NineSurface9_MarkContainerDirty( struct NineSurface9 *This )
 {
-    if (This->texture) {
-        struct NineBaseTexture9 *tex =
-            NineBaseTexture9(This->base.base.container);
-        assert(tex);
-        assert(This->texture == D3DRTYPE_TEXTURE ||
-               This->texture == D3DRTYPE_CUBETEXTURE);
-        if (This->base.pool == D3DPOOL_MANAGED)
-            tex->managed.dirty = TRUE;
-        else
-        if (This->base.usage & D3DUSAGE_AUTOGENMIPMAP)
-            tex->dirty_mip = TRUE;
+    struct NineUnknown *container = NineUnknown(This)->container;
+    struct NineBaseTexture9 *tex;
+    HRESULT hr;
 
-        BASETEX_REGISTER_UPDATE(tex);
+    if (container) {
+        hr = NineUnknown_QueryInterface(container, (REFIID)&IID_IDirect3DBaseTexture9, (void **)&tex);
+        if (SUCCEEDED(hr)) {
+            if (This->base.pool == D3DPOOL_MANAGED)
+                tex->managed.dirty = TRUE;
+            else if (This->base.usage & D3DUSAGE_AUTOGENMIPMAP)
+                tex->dirty_mip = TRUE;
+
+            BASETEX_REGISTER_UPDATE(tex);
+
+            NineUnknown_Release(NineUnknown(tex));
+        }
     }
 }
 
@@ -298,33 +299,35 @@ inline void
 NineSurface9_AddDirtyRect( struct NineSurface9 *This,
                            const struct pipe_box *box )
 {
+    struct NineUnknown *container = NineUnknown(This)->container;
     RECT dirty_rect;
+    HRESULT hr;
+    void *tex;
 
     DBG("This=%p box=%p\n", This, box);
-
-    assert (This->base.pool != D3DPOOL_MANAGED ||
-            This->texture == D3DRTYPE_CUBETEXTURE ||
-            This->texture == D3DRTYPE_TEXTURE);
 
     if (This->base.pool == D3DPOOL_DEFAULT)
         return;
 
-    /* Add a dirty rect to level 0 of the parent texture */
-    dirty_rect.left = box->x << This->level_actual;
-    dirty_rect.right = dirty_rect.left + (box->width << This->level_actual);
-    dirty_rect.top = box->y << This->level_actual;
-    dirty_rect.bottom = dirty_rect.top + (box->height << This->level_actual);
+    if (container) {
+        /* Add a dirty rect to level 0 of the parent texture */
+        dirty_rect.left = box->x << This->level_actual;
+        dirty_rect.right = dirty_rect.left + (box->width << This->level_actual);
+        dirty_rect.top = box->y << This->level_actual;
+        dirty_rect.bottom = dirty_rect.top + (box->height << This->level_actual);
 
-    if (This->texture == D3DRTYPE_TEXTURE) {
-        struct NineTexture9 *tex =
-            NineTexture9(This->base.base.container);
+        hr = NineUnknown_QueryInterface(container, (REFIID)&IID_IDirect3DTexture9, &tex);
+        if (SUCCEEDED(hr)) {
+            NineTexture9_AddDirtyRect(NineTexture9(tex), &dirty_rect);
+            NineUnknown_Release(NineUnknown(tex));
+            return;
+        }
 
-        NineTexture9_AddDirtyRect(tex, &dirty_rect);
-    } else if (This->texture == D3DRTYPE_CUBETEXTURE) {
-        struct NineCubeTexture9 *ctex =
-            NineCubeTexture9(This->base.base.container);
-
-        NineCubeTexture9_AddDirtyRect(ctex, This->layer, &dirty_rect);
+        hr = NineUnknown_QueryInterface(container, (REFIID)&IID_IDirect3DCubeTexture9, &tex);
+        if (SUCCEEDED(hr)) {
+            NineCubeTexture9_AddDirtyRect(NineCubeTexture9(tex), This->layer, &dirty_rect);
+            NineUnknown_Release(NineUnknown(tex));
+        }
     }
 }
 
@@ -688,7 +691,7 @@ NineSurface9_SetResourceResize( struct NineSurface9 *This,
     assert(This->level == 0 && This->level_actual == 0);
     assert(!This->lock_count);
     assert(This->desc.Pool == D3DPOOL_DEFAULT);
-    assert(!This->texture);
+    assert(This->base.usage);
 
     pipe_resource_reference(&This->base.resource, resource);
 
@@ -716,7 +719,6 @@ NineSurface9_new( struct NineDevice9 *pDevice,
                   struct NineUnknown *pContainer,
                   struct pipe_resource *pResource,
                   void *user_buffer,
-                  uint8_t TextureType,
                   unsigned Level,
                   unsigned Layer,
                   D3DSURFACE_DESC *pDesc,
@@ -724,5 +726,5 @@ NineSurface9_new( struct NineDevice9 *pDevice,
 {
     NINE_DEVICE_CHILD_NEW(Surface9, ppOut, pDevice, /* args */
                           pContainer, pResource, user_buffer,
-                          TextureType, Level, Layer, pDesc);
+                          Level, Layer, pDesc);
 }
