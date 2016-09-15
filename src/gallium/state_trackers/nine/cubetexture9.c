@@ -148,8 +148,8 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
                     level_offsets[l] : NULL;
 
             hr = NineSurface9_new(This->base.base.base.device, NineUnknown(This),
-                                  This->base.base.resource, p, D3DRTYPE_CUBETEXTURE,
-                                  l, f, &sfdesc, &This->surfaces[f + 6 * l]);
+                                  This->base.base.resource, p, l, f,
+                                  &sfdesc, &This->surfaces[f + 6 * l]);
             if (FAILED(hr))
                 return hr;
         }
