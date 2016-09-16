@@ -181,21 +181,21 @@ static inline void
 NineVolume9_MarkContainerDirty( struct NineVolume9 *This )
 {
     struct NineBaseTexture9 *tex;
-#ifdef DEBUG
-    /* This is always contained by a NineVolumeTexture9. */
     GUID id = IID_IDirect3DVolumeTexture9;
     REFIID ref = &id;
-    assert(NineUnknown_QueryInterface(This->base.container, ref, (void **)&tex)
-           == S_OK);
-    assert(NineUnknown_Release(NineUnknown(tex)) != 0);
-#endif
 
-    tex = NineBaseTexture9(This->base.container);
+    /* This is always contained by a NineVolumeTexture9. */
+    assert(NineUnknown(This)->container);
+    assert(NineUnknown_QueryInterface(NineUnknown(This)->container, ref, (void **)&tex)
+           == S_OK);
     assert(tex);
+
     if (This->desc.Pool == D3DPOOL_MANAGED)
         tex->managed.dirty = TRUE;
 
     BASETEX_REGISTER_UPDATE(tex);
+
+    NineUnknown_Release(NineUnknown(tex));
 }
 
 HRESULT NINE_WINAPI
