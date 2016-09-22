@@ -403,8 +403,13 @@ NineAdapter9_CheckDeviceMultiSampleType( struct NineAdapter9 *This,
         return D3DERR_NOTAVAILABLE;
     }
 
-    if (pQualityLevels)
-        *pQualityLevels = 1; /* gallium doesn't have quality levels */
+    if (pQualityLevels) {
+        /* NONMASKABLE MultiSampleType might have more than one quality level,
+         * while MASKABLE MultiSampleTypes have only one level.
+         * Advertise quality levels and map each level to a sample count. */
+         *pQualityLevels = d3dmultisample_type_check(screen, SurfaceFormat,
+                 &MultiSampleType, D3DMULTISAMPLE_16_SAMPLES);
+    }
 
     return D3D_OK;
 }
