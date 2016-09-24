@@ -85,6 +85,7 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
     D3DWindowBuffer *ret;
     struct winsys_handle whandle;
     int stride, dmaBufFd;
+    HRESULT hr;
 
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = DRM_API_HANDLE_TYPE_FD;
@@ -96,14 +97,16 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
                                           PIPE_HANDLE_USAGE_READ);
     stride = whandle.stride;
     dmaBufFd = whandle.handle;
-    ID3DPresent_NewD3DWindowBufferFromDmaBuf(This->present,
-                                             dmaBufFd,
-                                             resource->width0,
-                                             resource->height0,
-                                             stride,
-                                             depth,
-                                             32,
-                                             &ret);
+    hr = ID3DPresent_NewD3DWindowBufferFromDmaBuf(This->present,
+                                                  dmaBufFd,
+                                                  resource->width0,
+                                                  resource->height0,
+                                                  stride,
+                                                  depth,
+                                                  32,
+                                                  &ret);
+    assert (SUCCEDED(hr));
+
     return ret;
 }
 
