@@ -490,8 +490,7 @@ update_framebuffer(struct NineDevice9 *device, bool is_clear)
             fb->nr_cbufs = i + 1;
 
             if (unlikely(rt->desc.Usage & D3DUSAGE_AUTOGENMIPMAP)) {
-                assert(rt->base.base.container);
-                NineBaseTexture9(rt->base.base.container)->dirty_mip = TRUE;
+                NineSurface9_MarkContainerDirty(rt);
             }
         } else {
             /* Color outputs must match RT slot,
