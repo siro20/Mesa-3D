@@ -3141,6 +3141,10 @@ _mesa_EGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image)
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    bool valid_target;
+
+   fprintf(stderr, "glEGLImageTargetTexture2D(target=%d, image=%p)\n", target, image);
+
+
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_VERTICES(ctx, 0);
 

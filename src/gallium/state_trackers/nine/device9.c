@@ -273,17 +273,16 @@ NineDevice9_ctor( struct NineDevice9 *This,
         struct pipe_box box;
         unsigned char *data;
 
+        memset(&tmpl, 0, sizeof(tmpl));
         tmpl.target = PIPE_BUFFER;
         tmpl.format = PIPE_FORMAT_R8_UNORM;
         tmpl.width0 = 16; /* 4 floats */
         tmpl.height0 = 1;
         tmpl.depth0 = 1;
         tmpl.array_size = 1;
-        tmpl.last_level = 0;
-        tmpl.nr_samples = 0;
         tmpl.usage = PIPE_USAGE_DEFAULT;
         tmpl.bind = PIPE_BIND_VERTEX_BUFFER;
-        tmpl.flags = 0;
+
         This->dummy_vbo = pScreen->resource_create(pScreen, &tmpl);
 
         if (!This->dummy_vbo)
@@ -305,17 +304,16 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->cursor.hotspot.y = -1;
     {
         struct pipe_resource tmpl;
+
+        memset(&tmpl, 0, sizeof(tmpl));
         tmpl.target = PIPE_TEXTURE_2D;
         tmpl.format = PIPE_FORMAT_R8G8B8A8_UNORM;
         tmpl.width0 = 64;
         tmpl.height0 = 64;
         tmpl.depth0 = 1;
         tmpl.array_size = 1;
-        tmpl.last_level = 0;
-        tmpl.nr_samples = 0;
         tmpl.usage = PIPE_USAGE_DEFAULT;
         tmpl.bind = PIPE_BIND_CURSOR | PIPE_BIND_SAMPLER_VIEW;
-        tmpl.flags = 0;
 
         This->cursor.image = pScreen->resource_create(pScreen, &tmpl);
         if (!This->cursor.image)
@@ -376,29 +374,23 @@ NineDevice9_ctor( struct NineDevice9 *This,
         struct pipe_resource tmplt;
         struct pipe_sampler_view templ;
         struct pipe_sampler_state samp;
-        memset(&samp, 0, sizeof(samp));
 
+        memset(&tmplt, 0, sizeof(tmplt));
         tmplt.target = PIPE_TEXTURE_2D;
         tmplt.width0 = 1;
         tmplt.height0 = 1;
         tmplt.depth0 = 1;
-        tmplt.last_level = 0;
         tmplt.array_size = 1;
         tmplt.usage = PIPE_USAGE_DEFAULT;
-        tmplt.flags = 0;
         tmplt.format = PIPE_FORMAT_B8G8R8A8_UNORM;
         tmplt.bind = PIPE_BIND_SAMPLER_VIEW;
-        tmplt.nr_samples = 0;
 
         This->dummy_texture = This->screen->resource_create(This->screen, &tmplt);
         if (!This->dummy_texture)
             return D3DERR_DRIVERINTERNALERROR;
 
+        memset(&templ, 0, sizeof(templ));
         templ.format = PIPE_FORMAT_B8G8R8A8_UNORM;
-        templ.u.tex.first_layer = 0;
-        templ.u.tex.last_layer = 0;
-        templ.u.tex.first_level = 0;
-        templ.u.tex.last_level = 0;
         templ.swizzle_r = PIPE_SWIZZLE_0;
         templ.swizzle_g = PIPE_SWIZZLE_0;
         templ.swizzle_b = PIPE_SWIZZLE_0;
@@ -409,6 +401,7 @@ NineDevice9_ctor( struct NineDevice9 *This,
         if (!This->dummy_sampler_view)
             return D3DERR_DRIVERINTERNALERROR;
 
+        memset(&samp, 0, sizeof(samp));
         samp.min_mip_filter = PIPE_TEX_MIPFILTER_NONE;
         samp.max_lod = 15.0f;
         samp.wrap_s = PIPE_TEX_WRAP_CLAMP_TO_EDGE;
@@ -3225,14 +3218,13 @@ NineDevice9_ProcessVertices( struct NineDevice9 *This,
     {
         struct pipe_resource templ;
 
+        memset(&templ, 0, sizeof(templ));
         templ.target = PIPE_BUFFER;
         templ.format = PIPE_FORMAT_R8_UNORM;
         templ.width0 = buffer_size;
-        templ.flags = 0;
         templ.bind = PIPE_BIND_STREAM_OUTPUT;
         templ.usage = PIPE_USAGE_STREAM;
         templ.height0 = templ.depth0 = templ.array_size = 1;
-        templ.last_level = templ.nr_samples = 0;
 
         resource = screen_sw->resource_create(screen_sw, &templ);
         if (!resource)

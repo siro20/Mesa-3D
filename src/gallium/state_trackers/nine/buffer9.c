@@ -64,6 +64,7 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
     info->format = PIPE_FORMAT_R8_UNORM;
     info->width0 = Size;
     info->flags = 0;
+    info->next = NULL;
 
     /* Note: WRITEONLY is just tip for resource placement, the resource
      * can still be read (but slower). */

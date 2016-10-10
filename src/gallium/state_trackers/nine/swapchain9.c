@@ -245,14 +245,13 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
      * For example 16 bits.*/
     depth = 24;
 
+    memset(&tmplt, 0, sizeof(tmplt));
     tmplt.target = PIPE_TEXTURE_2D;
     tmplt.width0 = pParams->BackBufferWidth;
     tmplt.height0 = pParams->BackBufferHeight;
     tmplt.depth0 = 1;
-    tmplt.last_level = 0;
     tmplt.array_size = 1;
     tmplt.usage = PIPE_USAGE_DEFAULT;
-    tmplt.flags = 0;
 
     desc.Type = D3DRTYPE_SURFACE;
     desc.Pool = D3DPOOL_DEFAULT;
@@ -523,18 +522,16 @@ create_present_buffer( struct NineSwapChain9 *This,
 {
     struct pipe_resource tmplt;
 
+    memset(&tmplt, 0, sizeof(tmplt));
     tmplt.target = PIPE_TEXTURE_2D;
     tmplt.width0 = width;
     tmplt.height0 = height;
     tmplt.depth0 = 1;
-    tmplt.last_level = 0;
     tmplt.array_size = 1;
     tmplt.usage = PIPE_USAGE_DEFAULT;
-    tmplt.flags = 0;
     tmplt.format = PIPE_FORMAT_B8G8R8X8_UNORM;
     tmplt.bind = NINE_BIND_BACKBUFFER_FLAGS |
                  NINE_BIND_PRESENTBUFFER_FLAGS;
-    tmplt.nr_samples = 0;
     if (This->actx->linear_framebuffer)
         tmplt.bind |= PIPE_BIND_LINEAR;
     *resource = This->screen->resource_create(This->screen, &tmplt);

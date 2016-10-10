@@ -79,6 +79,7 @@ static inline void _nine_bind(void **dst, void *obj)
         struct Nine##nine *__data; \
          \
         __data = CALLOC_STRUCT(Nine##nine); \
+        memset(__data, 0, sizeof(struct Nine##nine)); \
         if (!__data) { return E_OUTOFMEMORY; } \
          \
         __params.vtable = ((dev)->params.BehaviorFlags & D3DCREATE_MULTITHREADED) ? &Lock##nine##_vtable : &Nine##nine##_vtable; \
