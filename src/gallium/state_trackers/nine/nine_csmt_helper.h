@@ -186,7 +186,7 @@
 
 // get device funcs
 
-#define GET_DEVICE_Volume9 This->base.base.device
+#define GET_DEVICE_Volume9 This->base.device
 #define GET_DEVICE_VolumeTexture9 This->base.base.base.device
 #define GET_DEVICE_Device9 This
 #define GET_DEVICE_Device9Ex &This->base
@@ -270,6 +270,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     struct queue_element* slot; \
     struct s_##name##_##function##_private *args; \
     \
+    pipe_mutex_lock(d3d_csmt_global); \
     if (sizeof(struct s_##name##_##function##_private)) { \
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
         slot->data = args; \
@@ -283,6 +284,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     pre ;\
     queue_set_slot_ready(ctx->queue, slot); \
     post ;\
+    pipe_mutex_unlock(d3d_csmt_global); \
     return D3D_OK; \
 }
 
@@ -294,6 +296,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     struct queue_element* slot; \
     struct s_##name##_##function##_private *args; \
     \
+    pipe_mutex_lock(d3d_csmt_global); \
     if (sizeof(struct s_##name##_##function##_private)) { \
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
         slot->data = args; \
@@ -307,6 +310,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     pre ;\
     queue_set_slot_ready(ctx->queue, slot); \
     post ;\
+    pipe_mutex_unlock(d3d_csmt_global); \
 }
 
 
@@ -319,6 +323,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     struct s_##name##_##function##_private *args; \
     ret r; \
     \
+    pipe_mutex_lock(d3d_csmt_global); \
     assert(sizeof(struct s_##name##_##function##_private)); \
     slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
     slot->data = args; \
@@ -329,6 +334,7 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     pre ;\
     queue_set_slot_ready_and_wait(ctx->queue, slot); \
     post ;\
+    pipe_mutex_unlock(d3d_csmt_global); \
     return r; \
 }
 

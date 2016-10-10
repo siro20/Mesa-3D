@@ -74,7 +74,7 @@ struct csmt_context {
 // Resource functions
 
 static HRESULT NINE_WINAPI
-PureResource9_SetPrivateData( struct NineResource9 *This,
+PureUnknown_SetPrivateData( struct NineUnknown *This,
                               REFGUID refguid,
                               const void *pData,
                               DWORD SizeOfData,
@@ -82,31 +82,31 @@ PureResource9_SetPrivateData( struct NineResource9 *This,
 {
     HRESULT r;
     pipe_mutex_lock(d3d_csmt_global);
-    r = NineResource9_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
+    r = NineUnknown_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
     pipe_mutex_unlock(d3d_csmt_global);
     return r;
 }
 
 static HRESULT NINE_WINAPI
-PureResource9_GetPrivateData( struct NineResource9 *This,
+PureUnknown_GetPrivateData( struct NineUnknown *This,
                               REFGUID refguid,
                               void *pData,
                               DWORD *pSizeOfData )
 {
     HRESULT r;
     pipe_mutex_lock(d3d_csmt_global);
-    r = NineResource9_GetPrivateData(This, refguid, pData, pSizeOfData);
+    r = NineUnknown_GetPrivateData(This, refguid, pData, pSizeOfData);
     pipe_mutex_unlock(d3d_csmt_global);
     return r;
 }
 
 static HRESULT NINE_WINAPI
-PureResource9_FreePrivateData( struct NineResource9 *This,
+PureUnknown_FreePrivateData( struct NineUnknown *This,
                                REFGUID refguid )
 {
     HRESULT r;
     pipe_mutex_lock(d3d_csmt_global);
-    r = NineResource9_FreePrivateData(This, refguid);
+    r = NineUnknown_FreePrivateData(This, refguid);
     pipe_mutex_unlock(d3d_csmt_global);
     return r;
 }
@@ -181,11 +181,11 @@ CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, ColorFill,,,
 						 ARG_COPY_REF(RECT, pRect),
 						 ARG_VAL(D3DCOLOR, color))
 
-#if 0
+#if 1
 CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetRenderTarget,,,
 						 ARG_VAL(DWORD, RenderTargetIndex),
 						 ARG_BIND_REF(IDirect3DSurface9, pRenderTarget))
-#endif
+#else
 static void
 PureDevice9_SetRenderTarget_rx( struct NineDevice9 *This,
                                void *arg )
@@ -231,14 +231,15 @@ PureDevice9_SetRenderTarget( struct NineDevice9 *This,
 
     return D3D_OK;
 }
-#if 0
+#endif
+
+#if 1
 /* Available on PURE devices */
 CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetRenderTarget,,,
 					 HRESULT,
 					 ARG_VAL(DWORD, RenderTargetIndex),
 					 ARG_REF(IDirect3DSurface9*, ppRenderTarget))
-
-#endif
+#else
 static HRESULT NINE_WINAPI
 PureDevice9_GetRenderTarget( struct NineDevice9 *This,
                              DWORD RenderTargetIndex,
@@ -258,8 +259,9 @@ PureDevice9_GetRenderTarget( struct NineDevice9 *This,
     NineUnknown_AddRef(NineUnknown(ctx->rt[RenderTargetIndex]));
     return D3D_OK;
 }
+#endif
 
-
+#if 0
 static void
 PureDevice9_SetDepthStencilSurface_rx( struct NineDevice9 *This,
                                void *arg )
@@ -273,6 +275,7 @@ PureDevice9_SetDepthStencilSurface_rx( struct NineDevice9 *This,
         ERR("Failed with error %x\n", r);
     nine_bind(&args->obj1, NULL);
 }
+
 
 static HRESULT NINE_WINAPI
 PureDevice9_SetDepthStencilSurface( struct NineDevice9 *This,
@@ -319,6 +322,14 @@ PureDevice9_GetDepthStencilSurface( struct NineDevice9 *This,
     NineUnknown_AddRef(NineUnknown(ctx->ds));
     return D3D_OK;
 }
+#endif
+
+CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetDepthStencilSurface,,,
+						 ARG_BIND_REF(IDirect3DSurface9, pNewZStencil))
+
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, GetDepthStencilSurface,,,
+					 HRESULT,
+					 ARG_REF(IDirect3DSurface9*, ppZStencilSurface))
 
 CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, BeginScene,,,)
 
@@ -383,6 +394,8 @@ PureDevice9_SetClipPlane( struct NineDevice9 *This,
 
     user_assert(pPlane, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetClipPlane_private), (void **)&args);
     slot->data = args;
     slot->func = PureDevice9_SetClipPlane_rx;
@@ -392,6 +405,7 @@ PureDevice9_SetClipPlane( struct NineDevice9 *This,
     memcpy(args->plane, pPlane, sizeof(args->plane));
 
     queue_set_slot_ready(ctx->queue, slot);
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -462,6 +476,8 @@ PureDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     user_assert(pVertexStreamZeroData && VertexStreamZeroStride,
                    D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     count = prim_count_to_vertex_count(PrimitiveType, PrimitiveCount);
     length = count * VertexStreamZeroStride;
     DBG("Got a chunk of %d bytes vertex data\n", length);
@@ -478,6 +494,7 @@ PureDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     memcpy(args->data, pVertexStreamZeroData, length);
 
     queue_set_slot_ready(ctx->queue, slot);
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -523,6 +540,9 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
 
     user_assert(pVertexStreamZeroData && VertexStreamZeroStride,
                    D3DERR_INVALIDCALL);
+
+    pipe_mutex_lock(d3d_csmt_global);
+
     count = prim_count_to_vertex_count(PrimitiveType, PrimitiveCount);
     index_size = (IndexDataFormat == D3DFMT_INDEX16) ? 2 : 4;
 
@@ -554,6 +574,7 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
 
     queue_set_slot_ready(ctx->queue, slot);
 
+    pipe_mutex_unlock(d3d_csmt_global);
     return D3D_OK;
 }
 
@@ -610,6 +631,8 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     if (Vector4fCount == 1) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
         slot->data = args;
@@ -634,6 +657,8 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
             queue_set_slot_ready(ctx->queue, slot);
         }
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -664,6 +689,8 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     for (i = 0; i < Vector4iCount; i++) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
         slot->data = args;
@@ -676,6 +703,8 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 
         queue_set_slot_ready(ctx->queue, slot);
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -706,6 +735,8 @@ PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     for (i = 0; i < BoolCount; i++) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
         slot->data = args;
@@ -718,6 +749,8 @@ PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
 
         queue_set_slot_ready(ctx->queue, slot);
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -765,6 +798,8 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     if (Vector4fCount == 1) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
         slot->data = args;
@@ -790,6 +825,8 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
             queue_set_slot_ready(ctx->queue, slot);
         }
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -821,6 +858,8 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     for (i = 0; i < Vector4iCount; i++) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
         slot->data = args;
@@ -833,6 +872,8 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 
         queue_set_slot_ready(ctx->queue, slot);
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -863,6 +904,8 @@ PureDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
+    pipe_mutex_lock(d3d_csmt_global);
+
     for (i = 0; i < BoolCount; i++) {
         slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
         slot->data = args;
@@ -875,6 +918,8 @@ PureDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
 
         queue_set_slot_ready(ctx->queue, slot);
     }
+
+    pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
@@ -1850,9 +1895,9 @@ IDirect3DSurface9Vtbl PureSurface9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -2046,9 +2091,9 @@ IDirect3DCubeTexture9Vtbl PureCubeTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)PureBaseTexture9_PreLoad,
@@ -2184,9 +2229,9 @@ IDirect3DIndexBuffer9Vtbl PureIndexBuffer9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -2332,9 +2377,9 @@ IDirect3DTexture9Vtbl PureTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)PureBaseTexture9_PreLoad,
@@ -2432,9 +2477,9 @@ IDirect3DVertexBuffer9Vtbl PureVertexBuffer9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)NineResource9_PreLoad, /* nop */
@@ -2478,9 +2523,9 @@ IDirect3DVolume9Vtbl PureVolume9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Volume9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureVolume9_GetContainer,
     (void *)NineVolume9_GetDesc, /* immutable */
     (void *)PureVolume9_LockBox,
@@ -2505,9 +2550,9 @@ IDirect3DVolumeTexture9Vtbl PureVolumeTexture9_vtable = {
     (void *)NineUnknown_AddRef,
     (void *)NineUnknown_Release,
     (void *)NineUnknown_GetDevice, /* actually part of Resource9 iface */
-    (void *)PureResource9_SetPrivateData,
-    (void *)PureResource9_GetPrivateData,
-    (void *)PureResource9_FreePrivateData,
+    (void *)PureUnknown_SetPrivateData,
+    (void *)PureUnknown_GetPrivateData,
+    (void *)PureUnknown_FreePrivateData,
     (void *)PureResource9_SetPriority,
     (void *)PureResource9_GetPriority,
     (void *)PureBaseTexture9_PreLoad,
@@ -2557,12 +2602,12 @@ static int nine_csmt_worker( void *arg ) {
     }
     nine_concurrent_queue_delete(ctx->queue);
 
-    for (i = 0; i < NINE_MAX_SIMULTANEOUS_RENDERTARGETS; i++) {
-        nine_bind(&ctx->rt[i], NULL);
-    }
-    nine_bind(&ctx->ds, NULL);
-    u_upload_destroy(ctx->vertex_uploader);
-    u_upload_destroy(ctx->index_uploader);
+   // for (i = 0; i < NINE_MAX_SIMULTANEOUS_RENDERTARGETS; i++) {
+    //    nine_bind(&ctx->rt[i], NULL);
+   // }
+   // nine_bind(&ctx->ds, NULL);
+    //u_upload_destroy(ctx->vertex_uploader);
+    //u_upload_destroy(ctx->index_uploader);
 
     FREE(ctx);
     DBG("csmt worker destroyed\n");
@@ -2575,7 +2620,7 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
     ctx = CALLOC_STRUCT(csmt_context);
     if (!ctx)
         return NULL;
-
+#if 0
     //TODO
     ctx->vertex_uploader = u_upload_create(This->pipe, 1024 * 128,
                                             PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
@@ -2592,7 +2637,7 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
         FREE(ctx);
         return NULL;
     }
-
+#endif
     ctx->queue = nine_concurrent_queue_create();
     if (!ctx->queue) {
         u_upload_destroy(This->index_uploader);

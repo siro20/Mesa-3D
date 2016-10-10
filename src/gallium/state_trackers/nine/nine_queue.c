@@ -34,16 +34,6 @@
 
 #define DBG_CHANNEL DBG_DEVICE
 
-#define ENTER_CRITICAL_SECTION() { \
-    while (p_atomic_cmpxchg(&ctx->crit_section, 0, 1)) { \
-        pthread_yield(); \
-    } \
-}
-
-#define LEAVE_CRITICAL_SECTION() { \
-    p_atomic_dec(&ctx->crit_section); \
-}
-
 #define WAIT_FOR_FREE_SLOT() { \
     while (p_atomic_read(&ctx->queue_size) == NINE_QUEUE_SIZE) { \
         queue_wake(ctx); \
@@ -82,8 +72,6 @@ queue_get_free_slot(struct concurrent_queue* ctx, unsigned memory_size, void **m
     struct queue_element* element;
 
     assert(ctx);
-
-    ENTER_CRITICAL_SECTION();
 
     WAIT_FOR_FREE_SLOT();
 
@@ -178,8 +166,6 @@ queue_set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element
     pipe_condvar_signal(ctx->event);
     pipe_mutex_unlock(ctx->mutex);
 
-    LEAVE_CRITICAL_SECTION();
-
    // pthread_yield();
 }
 
@@ -204,8 +190,6 @@ queue_set_slot_ready_and_wait(struct concurrent_queue* ctx, struct queue_element
     element->processed = &done;
 
     p_atomic_inc(&ctx->queue_size);
-
-    LEAVE_CRITICAL_SECTION();
 
     queue_wake(ctx);
 
@@ -246,6 +230,7 @@ nine_concurrent_queue_create(void)
 void
 nine_concurrent_queue_delete(struct concurrent_queue *ctx)
 {
+    pipe_mutex_destroy(ctx->mutex);
     FREE(ctx->mem_pool);
     FREE(ctx->buffer);
     FREE(ctx);
