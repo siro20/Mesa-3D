@@ -26,7 +26,7 @@
 #include "util/macros.h"
 #include "nine_helpers.h"
 
-#define NINE_QUEUE_SIZE (128)
+#define NINE_QUEUE_SIZE (1024)
 #define NINE_QUEUE_MASK (NINE_QUEUE_SIZE - 1)
 
 #define NINE_QUEUE_POOL_SIZE (1024 * 1024)

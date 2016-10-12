@@ -2577,6 +2577,8 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
         return NULL;
     }
 
+    ctx->render_thread = NineSwapChain9_CreateThread(This->swapchains[0], nine_csmt_worker, ctx);
+    usleep(10000);
     DBG("Returning context %p\n", ctx);
 
     return ctx;
