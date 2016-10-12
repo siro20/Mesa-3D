@@ -57,89 +57,46 @@
 
 #define DBG_CHANNEL DBG_DEVICE
 
-#define DEBUG_CREATE_ON_SEPERATE_CONTEXT 1
-
 pipe_static_mutex(d3d_csmt_global);
 
 struct csmt_context {
     HANDLE render_thread;
     struct concurrent_queue *queue;
     boolean terminate;
-    IDirect3DSurface9 *rt[NINE_MAX_SIMULTANEOUS_RENDERTARGETS];
-    IDirect3DSurface9 *ds;
-    struct u_upload_mgr *vertex_uploader;
-    struct u_upload_mgr *index_uploader;
 };
 
 // Resource functions
 
-static HRESULT NINE_WINAPI
-PureUnknown_SetPrivateData( struct NineUnknown *This,
-                              REFGUID refguid,
-                              const void *pData,
-                              DWORD SizeOfData,
-                              DWORD Flags )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineUnknown_SetPrivateData(This, refguid, pData, SizeOfData, Flags);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING_WITH_RESULT(Unknown, SetPrivateData,,,
+					 HRESULT,
+					 ARG_VAL(REFGUID, refguid),
+					 ARG_REF(const void, pData),
+					 ARG_VAL(DWORD, SizeOfData),
+					 ARG_VAL(DWORD, Flags))
 
-static HRESULT NINE_WINAPI
-PureUnknown_GetPrivateData( struct NineUnknown *This,
-                              REFGUID refguid,
-                              void *pData,
-                              DWORD *pSizeOfData )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineUnknown_GetPrivateData(This, refguid, pData, pSizeOfData);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING_WITH_RESULT(Unknown, GetPrivateData,,,
+					 HRESULT,
+					 ARG_VAL(REFGUID, refguid),
+					 ARG_REF(void, pData),
+					 ARG_REF(DWORD, SizeOfData))
 
-static HRESULT NINE_WINAPI
-PureUnknown_FreePrivateData( struct NineUnknown *This,
-                               REFGUID refguid )
-{
-    HRESULT r;
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineUnknown_FreePrivateData(This, refguid);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING_WITH_RESULT(Unknown, FreePrivateData,,,
+					HRESULT,
+					ARG_VAL(REFGUID, refguid))
 
-static DWORD NINE_WINAPI
-PureResource9_SetPriority( struct NineResource9 *This,
-                           DWORD PriorityNew )
-{
-    DWORD r;
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineResource9_SetPriority(This, PriorityNew);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
 
-static DWORD NINE_WINAPI
-PureResource9_GetPriority( struct NineResource9 *This )
-{
-    DWORD r;
-    pipe_mutex_lock(d3d_csmt_global);
-    r = NineResource9_GetPriority(This);
-    pipe_mutex_unlock(d3d_csmt_global);
-    return r;
-}
+CREATE_FUNC_BLOCKING_WITH_RESULT(Resource9, SetPriority,,,
+					DWORD,
+					ARG_VAL(DWORD, PriorityNew))
+
+CREATE_FUNC_BLOCKING_WITH_RESULT(Resource9, GetPriority,,,
+					DWORD)
 
 // functions to serialize
 
-/* HOWTO
- *
- */
 CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, EvictManagedResources,,,)
 
-CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, Reset,,nine_csmt_reset(This);,
+CREATE_FUNC_BLOCKING_WITH_RESULT(Device9, Reset,,,
 					 HRESULT,
 					 ARG_REF(D3DPRESENT_PARAMETERS, pPresentationParameters) )
 
@@ -2602,13 +2559,6 @@ static int nine_csmt_worker( void *arg ) {
     }
     nine_concurrent_queue_delete(ctx->queue);
 
-   // for (i = 0; i < NINE_MAX_SIMULTANEOUS_RENDERTARGETS; i++) {
-    //    nine_bind(&ctx->rt[i], NULL);
-   // }
-   // nine_bind(&ctx->ds, NULL);
-    //u_upload_destroy(ctx->vertex_uploader);
-    //u_upload_destroy(ctx->index_uploader);
-
     FREE(ctx);
     DBG("csmt worker destroyed\n");
     return 0;
@@ -2620,45 +2570,12 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
     ctx = CALLOC_STRUCT(csmt_context);
     if (!ctx)
         return NULL;
-#if 0
-    //TODO
-    ctx->vertex_uploader = u_upload_create(This->pipe, 1024 * 128,
-                                            PIPE_BIND_VERTEX_BUFFER, PIPE_USAGE_STREAM);
-    if (!ctx->vertex_uploader) {
-        FREE(ctx);
-        return NULL;
-    }
 
-    //TODO
-    ctx->index_uploader = u_upload_create(This->pipe, 128 * 1024,
-                                           PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_STREAM);
-    if (!ctx->index_uploader) {
-        u_upload_destroy(This->vertex_uploader);
-        FREE(ctx);
-        return NULL;
-    }
-#endif
     ctx->queue = nine_concurrent_queue_create();
     if (!ctx->queue) {
-        u_upload_destroy(This->index_uploader);
-        u_upload_destroy(This->vertex_uploader);
         FREE(ctx);
         return NULL;
     }
-
-#ifndef DEBUG_SINGLETHREAD
-    if (This->minor_version_num <= 1) {
-        ERR("Presentation Interface 1.2 required\n");
-    }
-    ctx->render_thread = NineSwapChain9_CreateThread(This->swapchains[0], nine_csmt_worker, ctx);
-    if (!ctx->render_thread) {
-        u_upload_destroy(This->index_uploader);
-        u_upload_destroy(This->vertex_uploader);
-        nine_concurrent_queue_delete(ctx->queue);
-        FREE(ctx);
-        return NULL;
-    }
-#endif
 
     DBG("Returning context %p\n", ctx);
 
@@ -2668,15 +2585,6 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
 void nine_csmt_reset( struct NineDevice9 *This ) {
     int i;
     struct csmt_context *ctx = This->csmt_context;
-
-    /* Reset internal state */
-    nine_bind(&ctx->rt[0], (IDirect3DSurface9 *)This->swapchains[0]->buffers[0]);
-    if (This->state.rs[D3DRS_ZENABLE])
-        nine_bind(&ctx->ds, (IDirect3DSurface9 *)This->swapchains[0]->zsbuf);
-
-    for (i = 1; i < NINE_MAX_SIMULTANEOUS_RENDERTARGETS; i++) {
-        nine_bind(&ctx->rt[i], NULL);
-    }
 }
 
 void nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx ) {

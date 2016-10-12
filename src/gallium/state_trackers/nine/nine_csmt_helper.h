@@ -203,6 +203,8 @@
 #define GET_DEVICE_AuthenticatedChannel9 This->base.device
 #define GET_DEVICE_CryptoSession9 This->base.device
 #define GET_DEVICE_Device9Video This->base.device
+#define GET_DEVICE_Resource9 This->base.device
+#define GET_DEVICE_Unknown This->device
 
 #define _GET_DEVICE_FUNC(name) GET_DEVICE_##name
 #define GET_DEVICE_FUNC(name) struct NineDevice9 *device = _GET_DEVICE_FUNC(name);
