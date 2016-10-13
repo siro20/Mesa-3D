@@ -22,28 +22,12 @@
 
 #include "device9.h"
 
-struct concurrent_queue;
+struct nine_ringqueue;
 
-struct pipe_context_csmt;
+void nine_ringqueue_push(struct nine_ringqueue* ctx, unsigned space);
+void *queue_get_free(struct nine_ringqueue* ctx, unsigned space);
+void nine_ringqueue_pop(struct nine_ringqueue* ctx, unsigned space);
+void *nine_ringqueue_get(struct nine_ringqueue* ctx);
 
-struct queue_element {
-	void (*func)(void *this, void *arg);
-	void *data;
-	unsigned *processed;
-	void *mem;
-	unsigned pool_size;
-	void *this;
-};
-
-struct queue_element* queue_get_free_slot(struct concurrent_queue* ctx, unsigned memory_size, void **mem);
-struct queue_element* queue_wait_slot_ready(struct concurrent_queue* ctx);
-boolean queue_is_slot_ready(struct concurrent_queue* ctx);
-void queue_set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element);
-void queue_set_slot_processed(struct concurrent_queue* ctx, struct queue_element* element);
-void queue_set_slot_ready_and_wait(struct concurrent_queue* ctx, struct queue_element* element);
-void queue_wake(struct concurrent_queue* ctx);
-
-void *queue_get_nop(void);
-
-struct concurrent_queue *nine_concurrent_queue_create(void);
-void nine_concurrent_queue_delete(struct concurrent_queue *ctx);
+void nine_ringqueue_delete(struct nine_ringqueue *ctx);
+struct nine_ringqueue* nine_ringqueue_create(void);

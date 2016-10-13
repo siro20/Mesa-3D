@@ -461,7 +461,6 @@ NineDevice9_ctor( struct NineDevice9 *This,
     if (This->pure) {
         This->csmt_context = nine_csmt_create(This);
         if (!This->csmt_context) { return E_OUTOFMEMORY; }
-        nine_csmt_reset(This);
     }
 
     This->update = &This->state;
@@ -4188,6 +4187,13 @@ NineDevice9_new( struct pipe_screen *pScreen,
         ERR("\033[1;31m\nEnabling CSMT on PURE device.\033[0m\n\n");
     else
         pCreationParameters->BehaviorFlags &= ~D3DCREATE_PUREDEVICE;
+
+    if (!!getenv("D3D_FORCE_CSMT"))
+    {
+        ERR("\033[1;31m\nForced CSMT on device.\033[0m\n\n");
+        pCreationParameters->BehaviorFlags |= D3DCREATE_PUREDEVICE;
+        pure = 1;
+    }
 
     NINE_NEW(Device9, ppOut, lock, pure, /* args */
              pScreen, pCreationParameters, pCaps,

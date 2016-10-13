@@ -215,7 +215,7 @@
 
 #define CREATE_SINK_NO_RESULT_UNBIND(name, func, ...) \
 static void \
-Pure##name##_##func##_rx( void *this, void *arg ) { \
+Pure##name##_##func##_rx( struct csmt_context *ctx, void *this, void *arg ) { \
     struct Nine ## name *This = (struct Nine ## name *) this; \
     struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
     (void) args; \
@@ -228,10 +228,11 @@ Pure##name##_##func##_rx( void *this, void *arg ) { \
 
 #define CREATE_SINK_NO_RESULT(name, func, ...) \
 static void \
-Pure##name##_##func##_rx( void *this, void *arg ) { \
+Pure##name##_##func##_rx( struct csmt_context *ctx, void *this, void *arg ) { \
     struct Nine ## name *This = (struct Nine ## name *) this; \
     struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
     (void) args; \
+    (void) ctx; \
     Nine##name##_##func( \
         This ARGS_FOR_CALL( __VA_ARGS__ ) \
     ); \
@@ -239,11 +240,12 @@ Pure##name##_##func##_rx( void *this, void *arg ) { \
 
 #define CREATE_SINK_PRINT_RESULT(name, func, ...) \
 static void \
-Pure##name##_##func##_rx( void *this, void *arg ) { \
+Pure##name##_##func##_rx( struct csmt_context *ctx, void *this, void *arg ) { \
     HRESULT r; \
     struct Nine ## name *This = (struct Nine ## name *) this; \
     struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
     (void) args; \
+    (void) ctx; \
     r = Nine##name##_##func( \
         This ARGS_FOR_CALL( __VA_ARGS__ ) \
     ); \
@@ -255,13 +257,15 @@ Pure##name##_##func##_rx( void *this, void *arg ) { \
 
 #define CREATE_SINK_WITH_RESULT(name, func, ...) \
 static void \
-Pure##name##_##func##_rx( void *this, void *arg ) { \
+Pure##name##_##func##_rx( struct csmt_context *ctx, void *this, void *arg ) { \
     struct Nine ## name *This = (struct Nine ## name *) this; \
     struct s_##name##_##func##_private *args = (struct s_##name##_##func##_private *) arg; \
     (void) args; \
     *args->_result = Nine##name##_##func( \
         This ARGS_FOR_CALL( __VA_ARGS__ ) \
     ); \
+    *(ctx->processed) = 1; \
+    nine_csmt_processed(ctx); \
 }
 
 #define CREATE_SOURCE_D3D_OK_RESULT(name, function, pre, post, ...) \
@@ -271,20 +275,26 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     GET_CONTEXT(name) \
     struct queue_element* slot; \
     struct s_##name##_##function##_private *args; \
+    unsigned heap; \
     \
+    (void) args; \
     pipe_mutex_lock(d3d_csmt_global); \
     if (sizeof(struct s_##name##_##function##_private)) { \
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
-        slot->data = args; \
+        heap = sizeof(struct s_##name##_##function##_private) + sizeof(struct queue_element); \
+        slot = queue_get_free(ctx->queue, heap); \
+        slot->data = (void *)slot + sizeof(struct queue_element); \
     } else { \
-        slot = queue_get_free_slot(ctx->queue, 0, NULL); \
+        heap = sizeof(struct queue_element); \
+        slot = queue_get_free(ctx->queue, heap); \
         slot->data = NULL; \
     } \
+    args = slot->data; \
+    slot->pool_size = heap; \
     slot->func = Pure##name##_##function##_rx; \
     THIS_BIND_FUNC(name) ;\
     ARGS_FOR_ASSIGN( __VA_ARGS__ ) ;\
     pre ;\
-    queue_set_slot_ready(ctx->queue, slot); \
+    nine_ringqueue_push(ctx->queue, heap); \
     post ;\
     pipe_mutex_unlock(d3d_csmt_global); \
     return D3D_OK; \
@@ -297,20 +307,25 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     GET_CONTEXT(name) \
     struct queue_element* slot; \
     struct s_##name##_##function##_private *args; \
+    unsigned heap; \
     \
     pipe_mutex_lock(d3d_csmt_global); \
     if (sizeof(struct s_##name##_##function##_private)) { \
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
-        slot->data = args; \
+        heap = sizeof(struct s_##name##_##function##_private) + sizeof(struct queue_element); \
+        slot = queue_get_free(ctx->queue, heap); \
+        slot->data = (void *)slot + sizeof(struct queue_element); \
     } else { \
-        slot = queue_get_free_slot(ctx->queue, 0, NULL); \
+        heap = sizeof(struct queue_element); \
+        slot = queue_get_free(ctx->queue, heap); \
         slot->data = NULL; \
     } \
+    args = slot->data; \
+    slot->pool_size = heap; \
     slot->func = Pure##name##_##function##_rx; \
     THIS_BIND_FUNC(name) ;\
     ARGS_FOR_ASSIGN( __VA_ARGS__ ) ;\
     pre ;\
-    queue_set_slot_ready(ctx->queue, slot); \
+    nine_ringqueue_push(ctx->queue, heap); \
     post ;\
     pipe_mutex_unlock(d3d_csmt_global); \
 }
@@ -323,18 +338,25 @@ Pure##name##_##function( struct Nine##name *This ARGS_FOR_DECLARATION( __VA_ARGS
     GET_CONTEXT(name) \
     struct queue_element* slot; \
     struct s_##name##_##function##_private *args; \
-    ret r; \
+    unsigned heap; \
+    ret r = 0; \
+    boolean processed = 0; \
     \
     pipe_mutex_lock(d3d_csmt_global); \
     assert(sizeof(struct s_##name##_##function##_private)); \
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct s_##name##_##function##_private), (void **)&args); \
-    slot->data = args; \
+    heap = sizeof(struct s_##name##_##function##_private) + sizeof(struct queue_element); \
+    slot = queue_get_free(ctx->queue, heap); \
+    slot->data = (void *)slot + sizeof(struct queue_element); \
+    args = slot->data; \
     slot->func = Pure##name##_##function##_rx; \
+    ctx->processed = &processed; \
+    slot->pool_size = heap; \
     args->_result = &r; \
     slot->this = (void *)This; \
     ARGS_FOR_ASSIGN( __VA_ARGS__ ) \
     pre ;\
-    queue_set_slot_ready_and_wait(ctx->queue, slot); \
+    nine_ringqueue_push(ctx->queue, heap); \
+    nine_csmt_waitprocessed(ctx, &processed); \
     post ;\
     pipe_mutex_unlock(d3d_csmt_global); \
     return r; \

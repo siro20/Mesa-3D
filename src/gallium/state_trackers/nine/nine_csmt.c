@@ -61,9 +61,38 @@ pipe_static_mutex(d3d_csmt_global);
 
 struct csmt_context {
     HANDLE render_thread;
-    struct concurrent_queue *queue;
+    struct nine_ringqueue *queue;
     boolean terminate;
+    pipe_condvar event_processed;
+    pipe_mutex mutex_processed;
+    boolean *processed;
 };
+
+struct queue_element {
+	void (*func)(struct csmt_context *ctx, void *this, void *arg);
+	void *data;
+	void *mem;
+	unsigned pool_size;
+	void *this;
+};
+
+// CSMT private functions
+
+static void nine_csmt_processed(struct csmt_context* ctx)
+{
+    pipe_mutex_lock(ctx->mutex_processed);
+    pipe_condvar_signal(ctx->event_processed);
+    pipe_mutex_unlock(ctx->mutex_processed);
+}
+
+static void nine_csmt_waitprocessed(struct csmt_context* ctx, boolean *cond)
+{
+    pipe_mutex_lock(ctx->mutex_processed);
+    while (! *cond) {
+        pipe_condvar_wait(ctx->event_processed, ctx->mutex_processed);
+    }
+    pipe_mutex_unlock(ctx->mutex_processed);
+}
 
 // Resource functions
 
@@ -328,8 +357,9 @@ struct s_Device9_SetClipPlane_private {
 };
 
 static void
-PureDevice9_SetClipPlane_rx( struct NineDevice9 *This,
-                            void *arg )
+PureDevice9_SetClipPlane_rx( struct csmt_context *ctx,
+		                     struct NineDevice9 *This,
+                             void *arg )
 {
     HRESULT r;
     struct s_Device9_SetClipPlane_private *args =
@@ -348,20 +378,23 @@ PureDevice9_SetClipPlane( struct NineDevice9 *This,
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
     struct s_Device9_SetClipPlane_private *args;
-
+    size_t heap;
     user_assert(pPlane, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetClipPlane_private), (void **)&args);
-    slot->data = args;
+    heap = sizeof(struct s_Device9_SetClipPlane_private) + sizeof(struct queue_element);
+    slot = queue_get_free(ctx->queue, heap);
+    slot->data = (void *)slot + sizeof(struct queue_element);
+    args = slot->data;
     slot->func = PureDevice9_SetClipPlane_rx;
     slot->this = (void *)This;
+    slot->pool_size = heap;
 
     args->Index = Index;
     memcpy(args->plane, pPlane, sizeof(args->plane));
 
-    queue_set_slot_ready(ctx->queue, slot);
+    nine_ringqueue_push(ctx->queue, heap);
     pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
@@ -402,7 +435,8 @@ CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, DrawIndexedPrimitive,,,
 						ARG_VAL(UINT, primCount))
 
 static void
-PureDevice9_DrawPrimitiveUP_rx( struct NineDevice9 *This,
+PureDevice9_DrawPrimitiveUP_rx( struct csmt_context *ctx,
+                                struct NineDevice9 *This,
                                 void *arg )
 {
     HRESULT r;
@@ -429,6 +463,7 @@ PureDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     struct csmt_context *ctx = This->csmt_context;
     struct queue_element* slot;
     struct csmt_dword1_uint2_data_args *args;
+    size_t heap;
 
     user_assert(pVertexStreamZeroData && VertexStreamZeroStride,
                    D3DERR_INVALIDCALL);
@@ -439,10 +474,14 @@ PureDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     length = count * VertexStreamZeroStride;
     DBG("Got a chunk of %d bytes vertex data\n", length);
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword1_uint2_data_args) + length, (void **)&args);
-    slot->data = args;
+    heap = sizeof(struct csmt_dword1_uint2_data_args) + sizeof(struct queue_element) + length;
+    slot = queue_get_free(ctx->queue, heap);
+    slot->data = (void *)slot + sizeof(struct queue_element);
+    args = slot->data;
+
     slot->func = PureDevice9_DrawPrimitiveUP_rx;
     slot->this = (void *)This;
+    slot->pool_size = heap;
 
     args->arg1 = PrimitiveType;
     args->arg1_u = PrimitiveCount;
@@ -450,14 +489,15 @@ PureDevice9_DrawPrimitiveUP( struct NineDevice9 *This,
     args->length = length;
     memcpy(args->data, pVertexStreamZeroData, length);
 
-    queue_set_slot_ready(ctx->queue, slot);
+    nine_ringqueue_push(ctx->queue, heap);
     pipe_mutex_unlock(d3d_csmt_global);
 
     return D3D_OK;
 }
 
 static void
-PureDevice9_DrawIndexedPrimitiveUP_rx( struct NineDevice9 *This,
+PureDevice9_DrawIndexedPrimitiveUP_rx( struct csmt_context *ctx,
+                                       struct NineDevice9 *This,
                                        void *arg )
 {
     HRESULT r;
@@ -494,6 +534,7 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     struct queue_element* slot;
     struct csmt_dword3_void3_uint4_result_args *args;
     int count, index_size;
+    size_t heap;
 
     user_assert(pVertexStreamZeroData && VertexStreamZeroStride,
                    D3DERR_INVALIDCALL);
@@ -503,20 +544,23 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     count = prim_count_to_vertex_count(PrimitiveType, PrimitiveCount);
     index_size = (IndexDataFormat == D3DFMT_INDEX16) ? 2 : 4;
 
-    void *data1 = malloc((NumVertices + MinVertexIndex) * VertexStreamZeroStride);
+    void *data1 = MALLOC((NumVertices + MinVertexIndex) * VertexStreamZeroStride);
     ERR("copying %d bytes\n", (NumVertices + MinVertexIndex) * VertexStreamZeroStride);
     memcpy((uint8_t*)data1 + MinVertexIndex * VertexStreamZeroStride,
             (uint8_t*)pVertexStreamZeroData + MinVertexIndex * VertexStreamZeroStride,
             NumVertices * VertexStreamZeroStride);
 
-    void *data2 = malloc(count * index_size);
+    void *data2 = MALLOC(count * index_size);
     ERR("copying %d bytes\n", count * index_size);
     memcpy(data2, pIndexData, count * index_size);
 
-    slot = queue_get_free_slot(ctx->queue, sizeof(struct csmt_dword3_void3_uint4_result_args), (void **)&args);
-    slot->data = args;
+    heap = sizeof(struct csmt_dword3_void3_uint4_result_args) + sizeof(struct queue_element);
+    slot = queue_get_free(ctx->queue, heap);
+    slot->data = (void *)slot + sizeof(struct queue_element);
+    args = slot->data;
     slot->func = PureDevice9_DrawIndexedPrimitiveUP_rx;
     slot->this = (void *)This;
+    slot->pool_size = heap;
 
     args->arg1 = PrimitiveType;
     args->arg2 = IndexDataFormat;
@@ -529,7 +573,7 @@ PureDevice9_DrawIndexedPrimitiveUP( struct NineDevice9 *This,
     args->obj1 = data1;
     args->obj2 = data2;
 
-    queue_set_slot_ready(ctx->queue, slot);
+    nine_ringqueue_push(ctx->queue, heap);
 
     pipe_mutex_unlock(d3d_csmt_global);
     return D3D_OK;
@@ -563,7 +607,7 @@ struct s_Device9_SetShaderConstantB {
 };
 
 static void
-PureDevice9_SetVertexShaderConstantF_rx( void *this, void *arg )
+PureDevice9_SetVertexShaderConstantF_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -585,33 +629,40 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
     struct queue_element* slot;
     int i;
     struct s_Device9_SetShaderConstantF *args;
+    size_t heap;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     if (Vector4fCount == 1) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetVertexShaderConstantF_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister;
         args->_Vector4fCount = 1;
         memcpy(&args->_vec, pConstantData, sizeof(float[4]));
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     } else {
         for (i = 0; i < Vector4fCount; i+=8) {
-            slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
-            slot->data = args;
+            heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+            slot = queue_get_free(ctx->queue, heap);
+            slot->data = (void *)slot + sizeof(struct queue_element);
+            args = slot->data;
             slot->func = PureDevice9_SetVertexShaderConstantF_rx;
             slot->this = (void *)This;
+            slot->pool_size = heap;
 
             args->_StartRegister = StartRegister + i;
             args->_Vector4fCount = MIN2(Vector4fCount - i, 8);
             memcpy(&args->_vec, &pConstantData[i * 4], sizeof(float[4]) * args->_Vector4fCount);
 
-            queue_set_slot_ready(ctx->queue, slot);
+            nine_ringqueue_push(ctx->queue, heap);
         }
     }
 
@@ -621,7 +672,7 @@ PureDevice9_SetVertexShaderConstantF( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetVertexShaderConstantI_rx( void *this, void *arg )
+PureDevice9_SetVertexShaderConstantI_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -643,22 +694,25 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
     struct queue_element* slot;
     struct s_Device9_SetShaderConstantI *args;
     int i;
-
+    size_t heap;
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     for (i = 0; i < Vector4iCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantI) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetVertexShaderConstantI_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister + i;
         args->_Vector4iCount = 1;
         memcpy(&args->_vec, &pConstantData[i * 4], sizeof(int[4]));
 
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     }
 
     pipe_mutex_unlock(d3d_csmt_global);
@@ -667,7 +721,7 @@ PureDevice9_SetVertexShaderConstantI( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetVertexShaderConstantB_rx( void *this, void *arg )
+PureDevice9_SetVertexShaderConstantB_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -689,22 +743,26 @@ PureDevice9_SetVertexShaderConstantB( struct NineDevice9 *This,
     struct queue_element* slot;
     struct s_Device9_SetShaderConstantB *args;
     int i;
+    size_t heap;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     for (i = 0; i < BoolCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantB) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetVertexShaderConstantB_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister + i;
         args->_BoolCount = 1;
         memcpy(&args->_vec, &pConstantData[i], sizeof(BOOL));
 
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     }
 
     pipe_mutex_unlock(d3d_csmt_global);
@@ -729,7 +787,7 @@ CREATE_FUNC_NON_BLOCKING_PRINT_RESULT(Device9, SetPixelShader,,,
 						ARG_BIND_REF(IDirect3DPixelShader9, pShader))
 
 static void
-PureDevice9_SetPixelShaderConstantF_rx( void *this, void *arg )
+PureDevice9_SetPixelShaderConstantF_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -752,34 +810,41 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
     struct queue_element* slot;
     int i;
     struct s_Device9_SetShaderConstantF *args;
+    size_t heap;
 
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     if (Vector4fCount == 1) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetPixelShaderConstantF_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister;
         args->_Vector4fCount = 1;
         memcpy(&args->_vec, pConstantData, sizeof(float[4]));
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     } else {
 
         for (i = 0; i < Vector4fCount; i+=8) {
-            slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantF), (void **)&args);
-            slot->data = args;
+            heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+            slot = queue_get_free(ctx->queue, heap);
+            slot->data = (void *)slot + sizeof(struct queue_element);
+            args = slot->data;
             slot->func = PureDevice9_SetPixelShaderConstantF_rx;
             slot->this = (void *)This;
+            slot->pool_size = heap;
 
             args->_StartRegister = StartRegister + i;
             args->_Vector4fCount = MIN2(Vector4fCount - i, 8);
             memcpy(&args->_vec, &pConstantData[i * 4], sizeof(float[4]) * args->_Vector4fCount);
 
-            queue_set_slot_ready(ctx->queue, slot);
+            nine_ringqueue_push(ctx->queue, heap);
         }
     }
 
@@ -789,7 +854,7 @@ PureDevice9_SetPixelShaderConstantF( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetPixelShaderConstantI_rx( void *this, void *arg )
+PureDevice9_SetPixelShaderConstantI_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -812,22 +877,25 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
     struct queue_element* slot;
     struct s_Device9_SetShaderConstantI *args;
     int i;
-
+    size_t heap;
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     for (i = 0; i < Vector4iCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantI), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetPixelShaderConstantI_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister + i;
         args->_Vector4iCount = 1;
         memcpy(&args->_vec, &pConstantData[i * 4], sizeof(int[4]));
 
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     }
 
     pipe_mutex_unlock(d3d_csmt_global);
@@ -836,7 +904,7 @@ PureDevice9_SetPixelShaderConstantI( struct NineDevice9 *This,
 }
 
 static void
-PureDevice9_SetPixelShaderConstantB_rx( void *this, void *arg )
+PureDevice9_SetPixelShaderConstantB_rx( struct csmt_context *ctx, void *this, void *arg )
 {
     HRESULT r;
     struct NineDevice9 *This = (struct NineDevice9 *)this;
@@ -858,22 +926,25 @@ PureDevice9_SetPixelShaderConstantB( struct NineDevice9 *This,
     struct queue_element* slot;
     struct s_Device9_SetShaderConstantB *args;
     int i;
-
+    size_t heap;
     user_assert(pConstantData, D3DERR_INVALIDCALL);
 
     pipe_mutex_lock(d3d_csmt_global);
 
     for (i = 0; i < BoolCount; i++) {
-        slot = queue_get_free_slot(ctx->queue, sizeof(struct s_Device9_SetShaderConstantB), (void **)&args);
-        slot->data = args;
+        heap = sizeof(struct s_Device9_SetShaderConstantF) + sizeof(struct queue_element);
+        slot = queue_get_free(ctx->queue, heap);
+        slot->data = (void *)slot + sizeof(struct queue_element);
+        args = slot->data;
         slot->func = PureDevice9_SetPixelShaderConstantB_rx;
         slot->this = (void *)This;
+        slot->pool_size = heap;
 
         args->_StartRegister = StartRegister + i;
         args->_BoolCount = 1;
         memcpy(&args->_vec, &pConstantData[i], sizeof(BOOL));
 
-        queue_set_slot_ready(ctx->queue, slot);
+        nine_ringqueue_push(ctx->queue, heap);
     }
 
     pipe_mutex_unlock(d3d_csmt_global);
@@ -2542,22 +2613,25 @@ ID3DAdapter9Vtbl PureAdapter9_vtable = { /* not used */
     (void *)NULL
 };
 
+
 /* CSMT functions */
 static int nine_csmt_worker( void *arg ) {
     struct csmt_context *ctx = arg;
     struct queue_element *slot;
-    int i;
     DBG("csmt worker spawned\n");
 
     while (!ctx->terminate) {
-        slot = queue_wait_slot_ready(ctx->queue);
+    	/* get slot */
+        slot = (struct queue_element *)nine_ringqueue_get(ctx->queue);
 
         /* decode */
-        slot->func(slot->this, slot->data);
+        slot->func(ctx, slot->this, slot->data);
 
-        queue_set_slot_processed(ctx->queue, slot);
+        /* free slot */
+		nine_ringqueue_pop(ctx->queue, slot->pool_size);
     }
-    nine_concurrent_queue_delete(ctx->queue);
+    nine_ringqueue_delete(ctx->queue);
+    pipe_mutex_destroy(ctx->mutex_processed);
 
     FREE(ctx);
     DBG("csmt worker destroyed\n");
@@ -2571,11 +2645,13 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
     if (!ctx)
         return NULL;
 
-    ctx->queue = nine_concurrent_queue_create();
+    ctx->queue = nine_ringqueue_create();
     if (!ctx->queue) {
         FREE(ctx);
         return NULL;
     }
+    pipe_condvar_init(ctx->event_processed);
+    pipe_mutex_init(ctx->mutex_processed);
 
     ctx->render_thread = NineSwapChain9_CreateThread(This->swapchains[0], nine_csmt_worker, ctx);
     usleep(10000);
@@ -2584,9 +2660,11 @@ struct csmt_context *nine_csmt_create( struct NineDevice9 *This ) {
     return ctx;
 }
 
-void nine_csmt_reset( struct NineDevice9 *This ) {
-    int i;
-    struct csmt_context *ctx = This->csmt_context;
+static void nop_func(struct csmt_context *ctx, void *arg1, void *arg2)
+{
+	(void) ctx;
+	(void) arg1;
+	(void) arg2;
 }
 
 void nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx ) {
@@ -2594,15 +2672,13 @@ void nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx ) {
     HANDLE render_thread = ctx->render_thread;
 
     /* NOP */
-    slot = queue_get_free_slot(ctx->queue, 0, NULL);
+    slot = queue_get_free(ctx->queue, sizeof(struct queue_element));
     slot->data = NULL;
-    slot->func = queue_get_nop();
+    slot->func = nop_func;
 
     ctx->terminate = TRUE;
 
-    queue_set_slot_ready(ctx->queue, slot);
-    /* wake worker thread */
-    queue_wake(ctx->queue);
+    nine_ringqueue_push(ctx->queue, sizeof(struct queue_element));
 
     NineSwapChain9_WaitForThread(This->swapchains[0], render_thread);
 }

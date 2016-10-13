@@ -31,7 +31,6 @@ struct csmt_context;
 
 struct csmt_context *nine_csmt_create( struct NineDevice9 *This );
 void nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx );
-void nine_csmt_reset( struct NineDevice9 *This );
 
 
 extern IDirect3DDevice9Vtbl PureDevice9_vtable;

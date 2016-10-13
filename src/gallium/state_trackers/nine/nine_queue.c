@@ -20,7 +20,6 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#include "util/u_atomic.h"
 #include "nine_queue.h"
 #include "os/os_thread.h"
 #include "util/macros.h"
@@ -29,209 +28,134 @@
 #define NINE_QUEUE_SIZE (1024)
 #define NINE_QUEUE_MASK (NINE_QUEUE_SIZE - 1)
 
-#define NINE_QUEUE_POOL_SIZE (1024 * 1024)
+#define NINE_QUEUE_POOL_SIZE (1024 * 1024 * 4)
 #define NINE_QUEUE_POOL_MASK (NINE_QUEUE_POOL_SIZE - 1)
 
 #define DBG_CHANNEL DBG_DEVICE
 
-#define WAIT_FOR_FREE_SLOT() { \
-    while (p_atomic_read(&ctx->queue_size) == NINE_QUEUE_SIZE) { \
-        queue_wake(ctx); \
-        pthread_yield(); } \
-}
-#define GET_FREE_POOL_SIZE() \
-        (p_atomic_read(&ctx->mem_pool_tail) + (NINE_QUEUE_POOL_SIZE - ctx->mem_pool_head))
-
-struct concurrent_queue {
-    struct queue_element *buffer;
+struct nine_ringqueue {
     unsigned head;
     unsigned tail;
+    unsigned tail_end;
     void *mem_pool;
-    volatile unsigned mem_pool_head;
-    volatile unsigned mem_pool_tail;
-    volatile unsigned crit_section;
-    volatile unsigned queue_size;
-    pipe_condvar event;
-    pipe_mutex mutex;
+    pipe_condvar event_pop;
+    pipe_condvar event_push;
+    pipe_mutex mutex_pop;
+    pipe_mutex mutex_push;
 };
 
-/* dummy function for NOP */
-static void nop(void *a, void *b) { (void)a; (void)b; }
+/* RX functions */
 
-void *queue_get_nop(void)
+/* Gets an element to process. Blocks if none in queue. */
+void *nine_ringqueue_get(struct nine_ringqueue* ctx)
 {
-	return nop;
+    pipe_mutex_lock(ctx->mutex_push);
+    while(ctx->tail == ctx->head)
+    {
+        pipe_condvar_wait(ctx->event_push, ctx->mutex_push);
+    }
+    pipe_mutex_unlock(ctx->mutex_push);
+
+    if (ctx->tail == ctx->tail_end) {
+        ctx->tail = 0;
+        ctx->tail_end = NINE_QUEUE_POOL_SIZE;
+    }
+
+    return ctx->mem_pool + ctx->tail;
 }
-#if DEBUG
-static int max_mem = 0;
-#endif
-struct queue_element*
-queue_get_free_slot(struct concurrent_queue* ctx, unsigned memory_size, void **mem)
+
+/* Pops a buffer with size space */
+void nine_ringqueue_pop(struct nine_ringqueue* ctx, unsigned space)
 {
-    unsigned ticket;
-    struct queue_element* element;
+    ctx->tail += space;
 
-    assert(ctx);
+    pipe_mutex_lock(ctx->mutex_pop);
+    pipe_condvar_signal(ctx->event_pop);
+    pipe_mutex_unlock(ctx->mutex_pop);
+}
 
-    WAIT_FOR_FREE_SLOT();
+/* TX functions */
 
-    ticket = ctx->head++ & NINE_QUEUE_MASK;
-    element = &ctx->buffer[ticket];
-
-    if (memory_size >= (NINE_QUEUE_POOL_SIZE / 4)) {
-        /* should never happen */
-        *mem = element->mem = malloc(memory_size);
-        ERR("have to allocate %d bytes\n", memory_size);
-        element->pool_size = 0;
-    } else if (memory_size) {
-#if DEBUG
-        if (max_mem < memory_size) {
-            DBG("memory_size=%d\n", memory_size);
-            max_mem = memory_size;
+/* gets a buffer with size space. May block if queue is full. */
+void *queue_get_free(struct nine_ringqueue* ctx, unsigned space)
+{
+    if (ctx->head + space > NINE_QUEUE_POOL_SIZE) {
+        pipe_mutex_lock(ctx->mutex_pop);
+        while (ctx->tail > ctx->head)
+        {
+            pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
         }
-#endif
-        assert(mem);
-        if ((ctx->mem_pool_head + memory_size) > NINE_QUEUE_POOL_SIZE) {
-            /* insert nop */
-            element->mem = NULL;
-            element->processed = NULL;
-            element->func = queue_get_nop();
-            element->pool_size = NINE_QUEUE_POOL_SIZE - (ctx->mem_pool_head + memory_size);
-            ctx->mem_pool_head = 0;
-            element->processed = NULL;
-            p_atomic_inc(&ctx->queue_size);
+        pipe_mutex_unlock(ctx->mutex_pop);
 
-            WAIT_FOR_FREE_SLOT();
-
-            /* get next element */
-            ticket = ctx->head++ & NINE_QUEUE_MASK;
-            element = &ctx->buffer[ticket];
+        pipe_mutex_lock(ctx->mutex_pop);
+        while(ctx->tail < space)
+        {
+            pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
         }
+        pipe_mutex_unlock(ctx->mutex_pop);
 
-        /* wait for enough memory */
-        while (GET_FREE_POOL_SIZE() < memory_size)
-            pthread_yield();
+        ctx->tail_end = ctx->head;
 
-        *mem = ctx->mem_pool + ctx->mem_pool_head;
-        element->pool_size = memory_size;
-        ctx->mem_pool_head = (ctx->mem_pool_head + element->pool_size) & NINE_QUEUE_POOL_MASK;
-        element->mem = NULL;
+        return ctx->mem_pool;
+    } else if (ctx->head < ctx->tail && ctx->head + space > ctx->tail) {
+        while (ctx->head + space > ctx->tail)
+        {
+            pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
+        }
+        pipe_mutex_unlock(ctx->mutex_pop);
+    }
+
+    return ctx->mem_pool + ctx->head;
+}
+
+/* pushes a buffer with size space. Doesn't wait. */
+void nine_ringqueue_push(struct nine_ringqueue* ctx, unsigned space)
+{
+    if (ctx->head + space > NINE_QUEUE_POOL_SIZE) {
+        ctx->head = space;
     } else {
-        element->pool_size = 0;
-        element->mem = NULL;
+        ctx->head += space;
     }
 
-    return element;
+    /* signal new instruction */
+    pipe_mutex_lock(ctx->mutex_push);
+    pipe_condvar_signal(ctx->event_push);
+    pipe_mutex_unlock(ctx->mutex_push);
 }
 
-boolean
-queue_is_slot_ready(struct concurrent_queue* ctx)
+struct nine_ringqueue*
+nine_ringqueue_create(void)
 {
-	return p_atomic_read(&ctx->queue_size);
-}
+    struct nine_ringqueue *ctx;
 
-struct queue_element*
-queue_wait_slot_ready(struct concurrent_queue* ctx)
-{
-    unsigned ticket = ctx->tail++ & NINE_QUEUE_MASK;
-    struct queue_element* element = &ctx->buffer[ticket];
-
-    if (queue_is_slot_ready(ctx))
-        return element;
-
-    pipe_mutex_lock(ctx->mutex);
-    while (!p_atomic_read(&ctx->queue_size)) {
-        pipe_condvar_wait(ctx->event, ctx->mutex);
-    }
-    pipe_mutex_unlock(ctx->mutex);
-    return element;
-}
-
-void
-queue_wake(struct concurrent_queue* ctx)
-{
-    pipe_mutex_lock(ctx->mutex);
-    pipe_condvar_signal(ctx->event);
-    pipe_mutex_unlock(ctx->mutex);
-    pthread_yield();
-}
-
-void
-queue_set_slot_ready(struct concurrent_queue* ctx, struct queue_element* element)
-{
-    element->processed = NULL;
-    p_atomic_inc(&ctx->queue_size);
-
-    pipe_mutex_lock(ctx->mutex);
-    pipe_condvar_signal(ctx->event);
-    pipe_mutex_unlock(ctx->mutex);
-
-   // pthread_yield();
-}
-
-void
-queue_set_slot_processed(struct concurrent_queue* ctx, struct queue_element* element)
-{
-    if (element->processed)
-        p_atomic_inc(element->processed);
-
-    if (element->mem) {
-        FREE(element->mem);
-    } else if (element->pool_size) {
-        ctx->mem_pool_tail = (ctx->mem_pool_tail + element->pool_size) & NINE_QUEUE_POOL_MASK;
-    }
-    p_atomic_dec(&ctx->queue_size);
-}
-
-void
-queue_set_slot_ready_and_wait(struct concurrent_queue* ctx, struct queue_element* element)
-{
-    unsigned done = FALSE;
-    element->processed = &done;
-
-    p_atomic_inc(&ctx->queue_size);
-
-    queue_wake(ctx);
-
-    while (!p_atomic_read(&done)) {
-        pthread_yield();
-    }
-}
-
-struct concurrent_queue*
-nine_concurrent_queue_create(void)
-{
-    struct concurrent_queue *ctx;
-
-    ctx = CALLOC_STRUCT(concurrent_queue);
+    ctx = CALLOC_STRUCT(nine_ringqueue);
     if (!ctx)
         return NULL;
 
-    ctx->buffer = CALLOC(1, NINE_QUEUE_SIZE * sizeof(struct queue_element));
-    if (!ctx->buffer) {
-        FREE(ctx);
-        return NULL;
-    }
-
-    ctx->mem_pool = malloc(NINE_QUEUE_POOL_SIZE);
+    ctx->mem_pool = MALLOC(NINE_QUEUE_POOL_SIZE);
 
     if (!ctx->mem_pool) {
-        FREE(ctx->buffer);
         FREE(ctx);
         return NULL;
     }
 
-    pipe_condvar_init(ctx->event);
-    pipe_mutex_init(ctx->mutex);
+    pipe_condvar_init(ctx->event_pop);
+    pipe_mutex_init(ctx->mutex_pop);
 
+    pipe_condvar_init(ctx->event_push);
+    pipe_mutex_init(ctx->mutex_push);
+
+
+    ctx->tail_end = NINE_QUEUE_POOL_SIZE;
     return ctx;
 }
 
 void
-nine_concurrent_queue_delete(struct concurrent_queue *ctx)
+nine_ringqueue_delete(struct nine_ringqueue *ctx)
 {
-    pipe_mutex_destroy(ctx->mutex);
+    pipe_mutex_destroy(ctx->mutex_pop);
+    pipe_mutex_destroy(ctx->mutex_push);
+
     FREE(ctx->mem_pool);
-    FREE(ctx->buffer);
     FREE(ctx);
 }
