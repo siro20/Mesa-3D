@@ -4182,13 +4182,13 @@ NineDevice9_new( struct pipe_screen *pScreen,
     lock = !!(pCreationParameters->BehaviorFlags & D3DCREATE_MULTITHREADED);
     pure = !!(pCreationParameters->BehaviorFlags & D3DCREATE_PUREDEVICE);
 
-    pure &= !!getenv("D3D_ENABLE_CSMT");
+    pure &= getenv("D3D_ENABLE_CSMT") ? !!atoi(getenv("D3D_ENABLE_CSMT")) : 0;
     if (pure)
         ERR("\033[1;31m\nEnabling CSMT on PURE device.\033[0m\n\n");
     else
         pCreationParameters->BehaviorFlags &= ~D3DCREATE_PUREDEVICE;
 
-    if (!!getenv("D3D_FORCE_CSMT"))
+    if (getenv("D3D_FORCE_CSMT") && !!atoi(getenv("D3D_ENABLE_CSMT")))
     {
         ERR("\033[1;31m\nForced CSMT on device.\033[0m\n\n");
         pCreationParameters->BehaviorFlags |= D3DCREATE_PUREDEVICE;

@@ -67,10 +67,12 @@ void *nine_ringqueue_get(struct nine_ringqueue* ctx)
 /* Pops a buffer with size space */
 void nine_ringqueue_pop(struct nine_ringqueue* ctx, unsigned space)
 {
+    pipe_mutex_lock(ctx->mutex_pop);
+
     ctx->tail += space;
 
-    pipe_mutex_lock(ctx->mutex_pop);
     pipe_condvar_signal(ctx->event_pop);
+
     pipe_mutex_unlock(ctx->mutex_pop);
 }
 
@@ -80,24 +82,26 @@ void nine_ringqueue_pop(struct nine_ringqueue* ctx, unsigned space)
 void *queue_get_free(struct nine_ringqueue* ctx, unsigned space)
 {
     if (ctx->head + space > NINE_QUEUE_POOL_SIZE) {
-        pipe_mutex_lock(ctx->mutex_pop);
-        while (ctx->tail > ctx->head)
-        {
-            pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
-        }
-        pipe_mutex_unlock(ctx->mutex_pop);
 
-        pipe_mutex_lock(ctx->mutex_pop);
-        while(ctx->tail < space)
-        {
-            pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
-        }
-        pipe_mutex_unlock(ctx->mutex_pop);
+		pipe_mutex_lock(ctx->mutex_pop);
+		while (ctx->tail > ctx->head)
+		{
+			pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
+		}
+		pipe_mutex_unlock(ctx->mutex_pop);
+
+		pipe_mutex_lock(ctx->mutex_pop);
+		while(ctx->tail < space)
+		{
+			pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
+		}
+		pipe_mutex_unlock(ctx->mutex_pop);
 
         ctx->tail_end = ctx->head;
 
         return ctx->mem_pool;
     } else if (ctx->head < ctx->tail && ctx->head + space > ctx->tail) {
+        pipe_mutex_lock(ctx->mutex_pop);
         while (ctx->head + space > ctx->tail)
         {
             pipe_condvar_wait(ctx->event_pop, ctx->mutex_pop);
@@ -111,14 +115,14 @@ void *queue_get_free(struct nine_ringqueue* ctx, unsigned space)
 /* pushes a buffer with size space. Doesn't wait. */
 void nine_ringqueue_push(struct nine_ringqueue* ctx, unsigned space)
 {
+    pipe_mutex_lock(ctx->mutex_push);
+
     if (ctx->head + space > NINE_QUEUE_POOL_SIZE) {
         ctx->head = space;
     } else {
         ctx->head += space;
     }
 
-    /* signal new instruction */
-    pipe_mutex_lock(ctx->mutex_push);
     pipe_condvar_signal(ctx->event_push);
     pipe_mutex_unlock(ctx->mutex_push);
 }
