@@ -2020,10 +2020,10 @@ nine_ff_update(struct NineDevice9 *device)
     struct nine_context *context = &device->context;
     struct pipe_constant_buffer cb;
 
-    DBG("vs=%p ps=%p\n", device->state.vs, device->state.ps);
+    DBG("vs=%p ps=%p\n", context->vs, device->state.ps);
 
     /* NOTE: the only reference belongs to the hash table */
-    if (!state->programmable_vs) {
+    if (!context->programmable_vs) {
         device->ff.vs = nine_ff_get_vs(device);
         device->state.changed.group |= NINE_STATE_VS;
     }
@@ -2032,7 +2032,7 @@ nine_ff_update(struct NineDevice9 *device)
         device->state.changed.group |= NINE_STATE_PS;
     }
 
-    if (!state->programmable_vs) {
+    if (!context->programmable_vs) {
         nine_ff_load_vs_transforms(device);
         nine_ff_load_tex_matrices(device);
         nine_ff_load_lights(device);
