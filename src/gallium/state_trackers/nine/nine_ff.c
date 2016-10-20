@@ -1875,12 +1875,11 @@ nine_ff_load_vs_transforms(struct NineDevice9 *device)
 static void
 nine_ff_load_lights(struct NineDevice9 *device)
 {
-    struct nine_state *state = &device->state;
     struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.vs_const;
     unsigned l;
 
-    if (state->changed.group & NINE_STATE_FF_MATERIAL) {
+    if (context->changed.group & NINE_STATE_FF_MATERIAL) {
         const D3DMATERIAL9 *mtl = &context->ff.material;
 
         memcpy(&dst[20], &mtl->Diffuse, 4 * sizeof(float));
@@ -1895,7 +1894,7 @@ nine_ff_load_lights(struct NineDevice9 *device)
         dst[19].w = mtl->Ambient.a + mtl->Emissive.a;
     }
 
-    if (!(state->changed.group & NINE_STATE_FF_LIGHTING))
+    if (!(context->changed.group & NINE_STATE_FF_LIGHTING))
         return;
 
     for (l = 0; l < context->ff.num_lights_active; ++l) {
@@ -1922,11 +1921,10 @@ nine_ff_load_lights(struct NineDevice9 *device)
 static void
 nine_ff_load_point_and_fog_params(struct NineDevice9 *device)
 {
-    const struct nine_state *state = &device->state;
     struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.vs_const;
 
-    if (!(state->changed.group & NINE_STATE_FF_OTHER))
+    if (!(context->changed.group & NINE_STATE_FF_OTHER))
         return;
     dst[26].x = asfloat(context->rs[D3DRS_POINTSIZE_MIN]);
     dst[26].y = asfloat(context->rs[D3DRS_POINTSIZE_MAX]);
@@ -1959,12 +1957,11 @@ nine_ff_load_tex_matrices(struct NineDevice9 *device)
 static void
 nine_ff_load_ps_params(struct NineDevice9 *device)
 {
-    const struct nine_state *state = &device->state;
     struct nine_context *context = &device->context;
     struct fvec4 *dst = (struct fvec4 *)device->ff.ps_const;
     unsigned s;
 
-    if (!(state->changed.group & (NINE_STATE_FF_PSSTAGES | NINE_STATE_FF_OTHER)))
+    if (!(context->changed.group & (NINE_STATE_FF_PSSTAGES | NINE_STATE_FF_OTHER)))
         return;
 
     for (s = 0; s < 8; ++s)
@@ -2021,11 +2018,11 @@ nine_ff_update(struct NineDevice9 *device)
     /* NOTE: the only reference belongs to the hash table */
     if (!context->programmable_vs) {
         device->ff.vs = nine_ff_get_vs(device);
-        device->state.changed.group |= NINE_STATE_VS;
+        context->changed.group |= NINE_STATE_VS;
     }
     if (!context->ps) {
         device->ff.ps = nine_ff_get_ps(device);
-        device->state.changed.group |= NINE_STATE_PS;
+        context->changed.group |= NINE_STATE_PS;
     }
 
     if (!context->programmable_vs) {
@@ -2082,7 +2079,7 @@ nine_ff_update(struct NineDevice9 *device)
         context->commit |= NINE_STATE_COMMIT_CONST_PS;
     }
 
-    device->state.changed.group &= ~NINE_STATE_FF;
+    context->changed.group &= ~NINE_STATE_FF;
 }
 
 
@@ -2136,25 +2133,29 @@ nine_ff_fini(struct NineDevice9 *device)
 static void
 nine_ff_prune_vs(struct NineDevice9 *device)
 {
+    struct nine_context *context = &device->context;
+
     if (device->ff.num_vs > 100) {
         /* could destroy the bound one here, so unbind */
         device->pipe->bind_vs_state(device->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_vs, nine_ff_ht_delete_cb, NULL);
         util_hash_table_clear(device->ff.ht_vs);
         device->ff.num_vs = 0;
-        device->state.changed.group |= NINE_STATE_VS;
+        context->changed.group |= NINE_STATE_VS;
     }
 }
 static void
 nine_ff_prune_ps(struct NineDevice9 *device)
 {
+    struct nine_context *context = &device->context;
+
     if (device->ff.num_ps > 100) {
         /* could destroy the bound one here, so unbind */
         device->pipe->bind_fs_state(device->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_ps, nine_ff_ht_delete_cb, NULL);
         util_hash_table_clear(device->ff.ht_ps);
         device->ff.num_ps = 0;
-        device->state.changed.group |= NINE_STATE_PS;
+        context->changed.group |= NINE_STATE_PS;
     }
 }
 
