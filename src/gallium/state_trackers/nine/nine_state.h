@@ -337,6 +337,10 @@ extern const uint32_t nine_render_states_vertex[(NINED3DRS_COUNT + 31) / 32];
 
 struct NineDevice9;
 
+/* Internal multithreading: When enabled, the nine_context functions
+ * will append work to a worker thread when possible. Only the worker
+ * thread can access struct nine_context. */
+
 void
 nine_context_set_render_state(struct NineDevice9 *device,
                               D3DRENDERSTATETYPE State,
@@ -468,7 +472,7 @@ nine_context_set_depth_stencil(struct NineDevice9 *device,
 void
 nine_context_set_clip_plane(struct NineDevice9 *device,
                             DWORD Index,
-                            struct nine_clipplane *pPlane);
+                            const struct nine_clipplane *pPlane);
 
 void
 nine_context_set_swvp(struct NineDevice9 *device,
@@ -560,5 +564,27 @@ nine_state_light_enable(struct nine_ff_state *, uint32_t *,
                         DWORD, BOOL);
 
 const char *nine_d3drs_to_string(DWORD State);
+
+/* CSMT functions */
+struct csmt_context;
+
+struct csmt_context *
+nine_csmt_create( struct NineDevice9 *This );
+
+void
+nine_csmt_destroy( struct NineDevice9 *This, struct csmt_context *ctx );
+
+void
+nine_csmt_process( struct NineDevice9 *This );
+
+
+/* Get the pipe_context (should not be called from the worker thread).
+ * All the work in the worker thread is finished before returning. */
+struct pipe_context *
+nine_context_get_pipe( struct NineDevice9 *device );
+
+/* Can be called from all threads */
+struct pipe_context *
+nine_context_get_pipe_multithread( struct NineDevice9 *device );
 
 #endif /* _NINE_STATE_H_ */
