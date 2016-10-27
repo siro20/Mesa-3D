@@ -1545,7 +1545,7 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
                          D3DTEXTUREFILTERTYPE Filter )
 {
     struct pipe_screen *screen = This->screen;
-    struct pipe_context *pipe = NineDevice9_GetPipe(This);
+    struct pipe_context *pipe;
     struct NineSurface9 *dst = NineSurface9(pDestSurface);
     struct NineSurface9 *src = NineSurface9(pSourceSurface);
     struct pipe_resource *dst_res = NineSurface9_GetResource(dst);
@@ -1718,7 +1718,7 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
                                                 PIPE_BIND_RENDER_TARGET),
                     D3DERR_INVALIDCALL);
 
-        pipe->blit(pipe, &blit);
+        nine_context_blit(This, &blit);
     } else {
         assert(blit.dst.box.x >= 0 && blit.dst.box.y >= 0 &&
                blit.src.box.x >= 0 && blit.src.box.y >= 0 &&
@@ -1728,6 +1728,7 @@ NineDevice9_StretchRect( struct NineDevice9 *This,
                blit.src.box.y + blit.src.box.height <= src->desc.Height);
         /* Or drivers might crash ... */
         DBG("Using resource_copy_region.\n");
+        pipe = NineDevice9_GetPipe(This);
         pipe->resource_copy_region(pipe,
             blit.dst.resource, blit.dst.level,
             blit.dst.box.x, blit.dst.box.y, blit.dst.box.z,
