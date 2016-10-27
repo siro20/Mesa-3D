@@ -59,7 +59,6 @@ NineSwapChain9_ctor( struct NineSwapChain9 *This,
         return hr;
 
     This->screen = NineDevice9_GetScreen(This->base.device);
-    This->pipe = NineDevice9_GetPipe(This->base.device);
     This->implicit = implicit;
     This->actx = pCTX;
     This->present = pPresent;
@@ -82,13 +81,14 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
                        int for_frontbuffer_reading)
 {
     D3DWindowBuffer *ret;
+    struct pipe_context *pipe = NineDevice9_GetPipe(This->base.device);
     struct winsys_handle whandle;
     int stride, dmaBufFd;
     HRESULT hr;
 
     memset(&whandle, 0, sizeof(whandle));
     whandle.type = DRM_API_HANDLE_TYPE_FD;
-    This->screen->resource_get_handle(This->screen, This->pipe, resource,
+    This->screen->resource_get_handle(This->screen, pipe, resource,
                                       &whandle,
                                       for_frontbuffer_reading ?
                                           PIPE_HANDLE_USAGE_WRITE :
@@ -552,6 +552,7 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
 {
     struct NineDevice9 *device = This->base.device;
     struct pipe_blit_info blit;
+    struct pipe_context *pipe;
 
     if (device->cursor.software && device->cursor.visible && device->cursor.w) {
         memset(&blit, 0, sizeof(blit));
@@ -589,7 +590,8 @@ handle_draw_cursor_and_hud( struct NineSwapChain9 *This, struct pipe_resource *r
             blit.dst.box.x, blit.dst.box.y);
 
         blit.alpha_blend = TRUE;
-        This->pipe->blit(This->pipe, &blit);
+        pipe = NineDevice9_GetPipe(This->base.device);
+        pipe->blit(pipe, &blit);
     }
 
     if (device->hud && resource) {
@@ -641,6 +643,7 @@ present( struct NineSwapChain9 *This,
          const RGNDATA *pDirtyRegion,
          DWORD dwFlags )
 {
+    struct pipe_context *pipe;
     struct pipe_resource *resource;
     struct pipe_fence_handle *fence;
     HRESULT hr;
@@ -679,6 +682,8 @@ present( struct NineSwapChain9 *This,
     if (This->params.SwapEffect == D3DSWAPEFFECT_DISCARD)
         handle_draw_cursor_and_hud(This, resource);
 
+    pipe = NineDevice9_GetPipe(This->base.device);
+
     if (This->present_buffers[0]) {
         memset(&blit, 0, sizeof(blit));
         blit.src.resource = resource;
@@ -708,18 +713,18 @@ present( struct NineSwapChain9 *This,
         blit.scissor_enable = FALSE;
         blit.alpha_blend = FALSE;
 
-        This->pipe->blit(This->pipe, &blit);
+        pipe->blit(pipe, &blit);
     }
 
     /* The resource we present has to resolve fast clears
      * if needed (and other things) */
-    This->pipe->flush_resource(This->pipe, resource);
+    pipe->flush_resource(pipe, resource);
 
     if (This->params.SwapEffect != D3DSWAPEFFECT_DISCARD)
         handle_draw_cursor_and_hud(This, resource);
 
     fence = NULL;
-    This->pipe->flush(This->pipe, &fence, PIPE_FLUSH_END_OF_FRAME);
+    pipe->flush(pipe, &fence, PIPE_FLUSH_END_OF_FRAME);
     if (fence) {
         swap_fences_push_back(This, fence);
         This->screen->fence_reference(This->screen, &fence, NULL);
