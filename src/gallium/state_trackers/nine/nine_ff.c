@@ -1748,7 +1748,7 @@ nine_ff_get_ps(struct NineDevice9 *device)
             break;
         }
 
-        if (!context->texture[s] &&
+        if (!context->texture[s].enabled &&
             context->ff.tex_stage[s][D3DTSS_COLORARG1] == D3DTA_TEXTURE) {
             /* This should also disable the stage. */
             key.ts[s].colorop = key.ts[s].alphaop = D3DTOP_DISABLE;
@@ -1786,8 +1786,8 @@ nine_ff_get_ps(struct NineDevice9 *device)
         }
         key.ts[s].resultarg = context->ff.tex_stage[s][D3DTSS_RESULTARG] == D3DTA_TEMP;
 
-        if (context->texture[s]) {
-            switch (context->texture[s]->base.type) {
+        if (context->texture[s].enabled) {
+            switch (context->texture[s].type) {
             case D3DRTYPE_TEXTURE:       key.ts[s].textarget = 1; break;
             case D3DRTYPE_VOLUMETEXTURE: key.ts[s].textarget = 2; break;
             case D3DRTYPE_CUBETEXTURE:   key.ts[s].textarget = 3; break;
