@@ -200,6 +200,17 @@ nine_queue_alloc(struct nine_queue_pool* ctx, unsigned space)
     return cmdbuf->mem_pool + offset;
 }
 
+/* Returns the current queue empty state.
+ * TRUE no instructions queued.
+ * FALSE one ore more instructions queued. */
+bool
+nine_queue_isempty(struct nine_queue_pool* ctx)
+{
+    struct nine_cmdbuf *cmdbuf = &ctx->pool[ctx->head];
+
+    return (ctx->tail == ctx->head) && !cmdbuf->num_instr;
+}
+
 struct nine_queue_pool*
 nine_queue_create(void)
 {

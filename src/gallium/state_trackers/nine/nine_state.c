@@ -176,6 +176,9 @@ nine_csmt_process( struct NineDevice9 *device )
     if (!device->csmt_active)
         return;
 
+    if (nine_queue_isempty(ctx->pool))
+        return;
+
     DBG("device=%p\n", device);
 
     /* NOP */
