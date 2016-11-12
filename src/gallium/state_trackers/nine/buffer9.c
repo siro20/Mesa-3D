@@ -323,8 +323,10 @@ NineBuffer9_Unlock( struct NineBuffer9 *This )
     if (This->base.pool != D3DPOOL_MANAGED) {
         pipe = This->maps[This->nmaps].is_pipe_secondary ?
             device->pipe_secondary :
-            NineDevice9_GetPipe(device);
+            nine_context_get_pipe_acquire(device);
         pipe->transfer_unmap(pipe, This->maps[This->nmaps].transfer);
+        if (!This->maps[This->nmaps].is_pipe_secondary)
+            nine_context_get_pipe_release(device);
     } else {
         BASEBUF_REGISTER_UPDATE(This);
     }
