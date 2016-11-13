@@ -532,7 +532,7 @@ nine_context_blit(struct NineDevice9 *device,
 
 void
 nine_context_clear_render_target(struct NineDevice9 *device,
-                                 struct pipe_surface* surf,
+                                 struct NineSurface9 *surface,
                                  D3DCOLOR color,
                                  UINT x,
                                  UINT y,

@@ -2679,16 +2679,21 @@ CSMT_ITEM_NO_WAIT(nine_context_blit,
     context->pipe->blit(context->pipe, blit);
 }
 
-void
-nine_context_clear_render_target(struct NineDevice9 *device,
-                                 struct pipe_surface* surf,
-                                 D3DCOLOR color,
-                                 UINT x,
-                                 UINT y,
-                                 UINT width,
-                                 UINT height)
+CSMT_ITEM_NO_WAIT(nine_context_clear_render_target,
+                  ARG_BIND_REF(struct NineSurface9, surface),
+                  ARG_VAL(D3DCOLOR, color),
+                  ARG_VAL(UINT, x),
+                  ARG_VAL(UINT, y),
+                  ARG_VAL(UINT, width),
+                  ARG_VAL(UINT, height))
 {
-    
+    struct nine_context *context = &device->context;
+    struct pipe_surface *surf;
+    union pipe_color_union rgba;
+
+    d3dcolor_to_pipe_color_union(&rgba, color);
+    surf = NineSurface9_GetSurface(surface, 0);
+    context->pipe->clear_render_target(context->pipe, surf, &rgba, x, y, width, height, false);
 }
 
 struct pipe_query *
