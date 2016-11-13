@@ -2679,6 +2679,18 @@ CSMT_ITEM_NO_WAIT(nine_context_blit,
     context->pipe->blit(context->pipe, blit);
 }
 
+void
+nine_context_clear_render_target(struct NineDevice9 *device,
+                                 struct pipe_surface* surf,
+                                 D3DCOLOR color,
+                                 UINT x,
+                                 UINT y,
+                                 UINT width,
+                                 UINT height)
+{
+    
+}
+
 struct pipe_query *
 nine_context_create_query(struct NineDevice9 *device, unsigned query_type)
 {
