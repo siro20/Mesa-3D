@@ -193,6 +193,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
     if (This->may_swvp)
         This->caps.MaxVertexShaderConst = NINE_MAX_CONST_F_SWVP;
 
+    This->pure = !!(This->params.BehaviorFlags & D3DCREATE_PUREDEVICE);
+
     This->context.pipe = This->screen->context_create(This->screen, NULL, 0);
     This->pipe_secondary = This->screen->context_create(This->screen, NULL, 0);
     if (!This->context.pipe || !This->pipe_secondary) { return E_OUTOFMEMORY; } /* guess */
@@ -2026,7 +2028,10 @@ NineDevice9_GetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
                           D3DMATRIX *pMatrix )
 {
-    D3DMATRIX *M = nine_state_access_transform(&This->state.ff, State, FALSE);
+    D3DMATRIX *M;
+
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
+    M = nine_state_access_transform(&This->state.ff, State, FALSE);
     user_assert(M, D3DERR_INVALIDCALL);
     *pMatrix = *M;
     return D3D_OK;
@@ -2098,6 +2103,7 @@ HRESULT NINE_WINAPI
 NineDevice9_GetMaterial( struct NineDevice9 *This,
                          D3DMATERIAL9 *pMaterial )
 {
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(pMaterial, E_POINTER);
     *pMaterial = This->state.ff.material;
     return D3D_OK;
@@ -2146,6 +2152,7 @@ NineDevice9_GetLight( struct NineDevice9 *This,
 {
     const struct nine_state *state = &This->state;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(pLight, D3DERR_INVALIDCALL);
     user_assert(Index < state->ff.num_lights, D3DERR_INVALIDCALL);
     user_assert(state->ff.light[Index].Type < NINED3DLIGHT_INVALID,
@@ -2195,6 +2202,7 @@ NineDevice9_GetLightEnable( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     unsigned i;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(Index < state->ff.num_lights, D3DERR_INVALIDCALL);
     user_assert(state->ff.light[Index].Type < NINED3DLIGHT_INVALID,
                 D3DERR_INVALIDCALL);
@@ -2239,6 +2247,7 @@ NineDevice9_GetClipPlane( struct NineDevice9 *This,
 {
     const struct nine_state *state = &This->state;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(Index < PIPE_MAX_CLIP_PLANES, D3DERR_INVALIDCALL);
 
     memcpy(pPlane, &state->clip.ucp[Index][0], sizeof(state->clip.ucp[0]));
@@ -2278,6 +2287,7 @@ NineDevice9_GetRenderState( struct NineDevice9 *This,
                             D3DRENDERSTATETYPE State,
                             DWORD *pValue )
 {
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(State < D3DRS_COUNT, D3DERR_INVALIDCALL);
 
     *pValue = This->state.rs_advertised[State];
@@ -2513,6 +2523,7 @@ NineDevice9_GetTextureStageState( struct NineDevice9 *This,
 {
     const struct nine_state *state = &This->state;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(Stage < ARRAY_SIZE(state->ff.tex_stage), D3DERR_INVALIDCALL);
     user_assert(Type < ARRAY_SIZE(state->ff.tex_stage[0]), D3DERR_INVALIDCALL);
 
@@ -2552,6 +2563,7 @@ NineDevice9_GetSamplerState( struct NineDevice9 *This,
                              D3DSAMPLERSTATETYPE Type,
                              DWORD *pValue )
 {
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(Sampler < NINE_MAX_SAMPLERS_PS ||
                 Sampler == D3DDMAPSAMPLER ||
                 (Sampler >= D3DVERTEXTEXTURESAMPLER0 &&
@@ -3289,6 +3301,7 @@ NineDevice9_GetVertexShaderConstantF( struct NineDevice9 *This,
 {
     const struct nine_state *state = &This->state;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister                  < This->caps.MaxVertexShaderConst, D3DERR_INVALIDCALL);
     user_assert(StartRegister + Vector4fCount <= This->caps.MaxVertexShaderConst, D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
@@ -3357,6 +3370,7 @@ NineDevice9_GetVertexShaderConstantI( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
                 D3DERR_INVALIDCALL);
     user_assert(StartRegister + Vector4iCount <= (This->may_swvp ? NINE_MAX_CONST_I_SWVP : NINE_MAX_CONST_I),
@@ -3432,6 +3446,7 @@ NineDevice9_GetVertexShaderConstantB( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister < (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
                 D3DERR_INVALIDCALL);
     user_assert(StartRegister + BoolCount <= (This->may_swvp ? NINE_MAX_CONST_B_SWVP : NINE_MAX_CONST_B),
@@ -3697,6 +3712,7 @@ NineDevice9_GetPixelShaderConstantF( struct NineDevice9 *This,
 {
     const struct nine_state *state = &This->state;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister                  < NINE_MAX_CONST_F_PS3, D3DERR_INVALIDCALL);
     user_assert(StartRegister + Vector4fCount <= NINE_MAX_CONST_F_PS3, D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
@@ -3761,6 +3777,7 @@ NineDevice9_GetPixelShaderConstantI( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister                  < NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
     user_assert(StartRegister + Vector4iCount <= NINE_MAX_CONST_I, D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
@@ -3830,6 +3847,7 @@ NineDevice9_GetPixelShaderConstantB( struct NineDevice9 *This,
     const struct nine_state *state = &This->state;
     int i;
 
+    user_assert(!This->pure, D3DERR_INVALIDCALL);
     user_assert(StartRegister              < NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
     user_assert(StartRegister + BoolCount <= NINE_MAX_CONST_B, D3DERR_INVALIDCALL);
     user_assert(pConstantData, D3DERR_INVALIDCALL);
