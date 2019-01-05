@@ -750,11 +750,11 @@ present( struct NineSwapChain9 *This,
     if (This->params.SwapEffect == D3DSWAPEFFECT_DISCARD)
         handle_draw_cursor_and_hud(This, resource);
 
-    ID3DPresent_GetWindowInfo(This->present, hDestWindowOverride, &target_width, &target_height, &target_depth);
+    hr = ID3DPresent_GetWindowInfo(This->present, hDestWindowOverride, &target_width, &target_height, &target_depth);
     (void)target_depth;
 
     /* Can happen for a few frames. */
-    if (target_width == 0 || target_height == 0) {
+    if (FAILED(hr) || target_width == 0 || target_height == 0) {
         target_width = resource->width0;
         target_height = resource->height0;
     }
