@@ -329,8 +329,17 @@ drm_create_adapter( int fd,
     return D3D_OK;
 }
 
+static HRESULT WINAPI
+drm_create_adapter2( int fd,
+                     struct D3DAdapterOption *options,
+                     ID3DAdapter9 **ppAdapter )
+{
+        return drm_create_adapter(fd, ppAdapter);
+}
+
 const struct D3DAdapter9DRM drm9_desc = {
     .major_version = D3DADAPTER9DRM_MAJOR,
     .minor_version = D3DADAPTER9DRM_MINOR,
-    .create_adapter = drm_create_adapter
+    .create_adapter = drm_create_adapter,
+    .create_adapter2 = drm_create_adapter2,
 };

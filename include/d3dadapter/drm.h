@@ -29,11 +29,19 @@
 #define D3DADAPTER9DRM_NAME "drm"
 /* current version */
 #define D3DADAPTER9DRM_MAJOR 0
-#define D3DADAPTER9DRM_MINOR 1
+#define D3DADAPTER9DRM_MINOR 2
 
 /* version 0.0: Initial release
  *         0.1: All IDirect3D objects can be assumed to have a pointer to the
- *              internal vtable in second position of the structure */
+ *              internal vtable in second position of the structure
+ *         0.2: The D3DAdapter9DRM struct has a new method create_adapter2
+ *              which takes optional parameters. */
+
+struct D3DAdapterOption {
+        const char *name;
+        const void *value;
+        struct D3DAdapterOption *next;
+};
 
 struct D3DAdapter9DRM
 {
@@ -43,6 +51,8 @@ struct D3DAdapter9DRM
     /* NOTE: upon passing an fd to this function, it's now owned by this
         function. If this function fails, the fd will be closed here as well */
     HRESULT (WINAPI *create_adapter)(int fd, ID3DAdapter9 **ppAdapter);
+    HRESULT (WINAPI *create_adapter2)(int fd, struct D3DAdapterOption *options,
+        ID3DAdapter9 **ppAdapter);
 };
 
 #endif /* _D3DADAPTER9_DRM_H_ */
